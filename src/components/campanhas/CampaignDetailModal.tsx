@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Switch } from "@/components/ui/switch";
 import { 
   CheckCircle2, 
   XCircle, 
@@ -15,12 +16,16 @@ import {
   Timer,
   Users,
   MessageSquare,
-  AlertCircle
+  AlertCircle,
+  Volume2,
+  VolumeX,
+  Pause as PauseIcon
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 interface CampaignMessage {
   id: string;
@@ -117,6 +122,42 @@ export function CampaignDetailModal({ campaignId, open, onClose }: CampaignDetai
   const [details, setDetails] = useState<CampaignDetails | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [countdown, setCountdown] = useState(10);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const prevStatusRef = useRef<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Create audio element for notification sound
+  useEffect(() => {
+    // Use a simple beep sound using Web Audio API
+    const createNotificationSound = () => {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      oscillator.frequency.value = 800;
+      oscillator.type = 'sine';
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+      
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.5);
+    };
+
+    // Store the function in ref for later use
+    (audioRef as any).playSound = createNotificationSound;
+  }, []);
+
+  const playCompletionSound = useCallback(() => {
+    if (!soundEnabled) return;
+    try {
+      (audioRef as any).playSound?.();
+    } catch (e) {
+      console.log('Could not play sound:', e);
+    }
+  }, [soundEnabled]);
 
   const loadDetails = useCallback(async () => {
     if (!campaignId) return;
@@ -124,16 +165,29 @@ export function CampaignDetailModal({ campaignId, open, onClose }: CampaignDetai
     setLoading(true);
     try {
       const data = await api<CampaignDetails>(`/api/campaigns/${campaignId}/details`);
+      
+      // Check if campaign just completed
+      if (prevStatusRef.current && 
+          prevStatusRef.current !== 'completed' && 
+          data.campaign.status === 'completed') {
+        playCompletionSound();
+        toast.success('🎉 Campanha concluída!', {
+          description: `${data.stats.sent} mensagens enviadas com sucesso`,
+        });
+      }
+      
+      prevStatusRef.current = data.campaign.status;
       setDetails(data);
     } catch (error) {
       console.error('Error loading campaign details:', error);
     } finally {
       setLoading(false);
     }
-  }, [campaignId]);
+  }, [campaignId, playCompletionSound]);
 
   useEffect(() => {
     if (open && campaignId) {
+      prevStatusRef.current = null;
       loadDetails();
       setCountdown(10);
     }
@@ -177,12 +231,44 @@ export function CampaignDetailModal({ campaignId, open, onClose }: CampaignDetai
               {details?.campaign?.name || 'Carregando...'}
             </DialogTitle>
             <div className="flex items-center gap-2">
-              {/* Auto-refresh indicator */}
+              {/* Sound toggle */}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setSoundEnabled(!soundEnabled)}
+                title={soundEnabled ? "Som ativado" : "Som desativado"}
+              >
+                {soundEnabled ? (
+                  <Volume2 className="h-4 w-4 text-primary" />
+                ) : (
+                  <VolumeX className="h-4 w-4 text-muted-foreground" />
+                )}
+              </Button>
+              
+              {/* Auto-refresh toggle */}
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn("h-8 w-8", !autoRefresh && "text-muted-foreground")}
+                onClick={() => setAutoRefresh(!autoRefresh)}
+                title={autoRefresh ? "Atualização automática ativada" : "Atualização automática desativada"}
+              >
+                {autoRefresh ? (
+                  <RefreshCw className="h-4 w-4 text-primary" />
+                ) : (
+                  <PauseIcon className="h-4 w-4" />
+                )}
+              </Button>
+              
+              {/* Countdown indicator */}
               {autoRefresh && details?.campaign && ['running', 'pending', 'paused'].includes(details.campaign.status) && (
-                <span className="text-xs text-muted-foreground tabular-nums">
+                <span className="text-xs text-muted-foreground tabular-nums min-w-[24px]">
                   {countdown}s
                 </span>
               )}
+              
+              {/* Manual refresh */}
               <Button 
                 variant="ghost" 
                 size="sm" 
@@ -191,7 +277,7 @@ export function CampaignDetailModal({ campaignId, open, onClose }: CampaignDetai
                   setCountdown(10);
                 }}
                 disabled={loading}
-                title={autoRefresh ? "Atualização automática ativa" : "Clique para atualizar"}
+                title="Atualizar agora"
               >
                 <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
               </Button>

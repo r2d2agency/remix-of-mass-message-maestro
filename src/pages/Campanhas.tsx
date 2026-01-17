@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,6 +37,10 @@ import {
   Coffee,
   Settings2,
   Check,
+  RefreshCw,
+  Search,
+  Filter,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCampaigns, Campaign } from "@/hooks/use-campaigns";
@@ -74,6 +78,17 @@ const Campanhas = () => {
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   
+  // Auto-refresh state
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [countdown, setCountdown] = useState(30);
+  
+  // Filter state
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [dateFilterStart, setDateFilterStart] = useState<Date | undefined>();
+  const [dateFilterEnd, setDateFilterEnd] = useState<Date | undefined>();
+  const [showFilters, setShowFilters] = useState(false);
+  
   // Form state - Basic
   const [campaignName, setCampaignName] = useState("");
   const [selectedConnection, setSelectedConnection] = useState("");
@@ -94,11 +109,7 @@ const Campanhas = () => {
   const [randomOrder, setRandomOrder] = useState(true);
   const [randomMessages, setRandomMessages] = useState(false);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     const results = await Promise.allSettled([
       getCampaigns(),
       getLists(),
@@ -113,7 +124,6 @@ const Campanhas = () => {
     } else {
       console.error('Erro ao carregar campanhas:', campaignsRes.reason);
       setCampaigns([]);
-      toast.error(`Erro ao carregar campanhas: ${campaignsRes.reason?.message || 'verifique o backend'}`);
     }
 
     if (listsRes.status === 'fulfilled') {
@@ -121,7 +131,6 @@ const Campanhas = () => {
     } else {
       console.error('Erro ao carregar listas:', listsRes.reason);
       setLists([]);
-      toast.error(`Erro ao carregar listas: ${listsRes.reason?.message || 'verifique o backend'}`);
     }
 
     if (messagesRes.status === 'fulfilled') {
@@ -129,7 +138,6 @@ const Campanhas = () => {
     } else {
       console.error('Erro ao carregar mensagens:', messagesRes.reason);
       setMessages([]);
-      toast.error(`Erro ao carregar mensagens: ${messagesRes.reason?.message || 'verifique o backend'}`);
     }
 
     if (connectionsRes.status === 'fulfilled') {
@@ -137,9 +145,77 @@ const Campanhas = () => {
     } else {
       console.error('Erro ao carregar conexões:', connectionsRes.reason);
       setConnections([]);
-      toast.error(`Erro ao carregar conexões: ${connectionsRes.reason?.message || 'verifique o backend'}`);
     }
+  }, [getCampaigns, getLists, getMessages]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Auto-refresh for campaign list
+  useEffect(() => {
+    if (!autoRefresh || activeTab !== 'list') return;
+    
+    // Check if any campaign is running/pending
+    const hasActiveCampaigns = campaigns.some(c => 
+      ['running', 'pending', 'paused'].includes(c.status)
+    );
+    
+    if (!hasActiveCampaigns) return;
+
+    const countdownInterval = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) {
+          loadData();
+          return 30;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(countdownInterval);
+  }, [autoRefresh, activeTab, campaigns, loadData]);
+
+  // Filtered campaigns
+  const filteredCampaigns = useMemo(() => {
+    return campaigns.filter(campaign => {
+      // Search filter
+      if (searchTerm) {
+        const search = searchTerm.toLowerCase();
+        const matchesName = campaign.name.toLowerCase().includes(search);
+        const matchesList = campaign.list_name?.toLowerCase().includes(search);
+        const matchesMessage = campaign.message_name?.toLowerCase().includes(search);
+        if (!matchesName && !matchesList && !matchesMessage) return false;
+      }
+      
+      // Status filter
+      if (statusFilter !== 'all' && campaign.status !== statusFilter) {
+        return false;
+      }
+      
+      // Date filter
+      if (dateFilterStart && campaign.start_date) {
+        const campaignDate = new Date(campaign.start_date);
+        if (campaignDate < dateFilterStart) return false;
+      }
+      
+      if (dateFilterEnd && campaign.start_date) {
+        const campaignDate = new Date(campaign.start_date);
+        if (campaignDate > dateFilterEnd) return false;
+      }
+      
+      return true;
+    });
+  }, [campaigns, searchTerm, statusFilter, dateFilterStart, dateFilterEnd]);
+
+  const clearFilters = () => {
+    setSearchTerm("");
+    setStatusFilter("all");
+    setDateFilterStart(undefined);
+    setDateFilterEnd(undefined);
   };
+
+  const hasActiveFilters = searchTerm || statusFilter !== 'all' || dateFilterStart || dateFilterEnd;
 
   const resetForm = () => {
     setCampaignName("");
@@ -276,18 +352,157 @@ const Campanhas = () => {
           </TabsList>
 
           <TabsContent value="list" className="space-y-4 mt-6">
+            {/* Filters Bar */}
+            <div className="flex flex-wrap items-center gap-3 p-4 rounded-lg bg-card border">
+              {/* Search */}
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar campanhas..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              
+              {/* Status Filter */}
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os Status</SelectItem>
+                  <SelectItem value="pending">Agendada</SelectItem>
+                  <SelectItem value="running">Em Execução</SelectItem>
+                  <SelectItem value="completed">Concluída</SelectItem>
+                  <SelectItem value="paused">Pausada</SelectItem>
+                  <SelectItem value="cancelled">Cancelada</SelectItem>
+                </SelectContent>
+              </Select>
+              
+              {/* Date Filter */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className={cn(
+                    "gap-2",
+                    (dateFilterStart || dateFilterEnd) && "text-primary border-primary"
+                  )}>
+                    <CalendarIcon className="h-4 w-4" />
+                    {dateFilterStart ? (
+                      dateFilterEnd ? (
+                        `${format(dateFilterStart, "dd/MM")} - ${format(dateFilterEnd, "dd/MM")}`
+                      ) : (
+                        format(dateFilterStart, "dd/MM/yy")
+                      )
+                    ) : (
+                      "Data"
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <div className="p-3 border-b">
+                    <p className="text-sm font-medium">Filtrar por data</p>
+                    <p className="text-xs text-muted-foreground">Selecione o período</p>
+                  </div>
+                  <div className="flex gap-2 p-2">
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1 px-1">De</p>
+                      <Calendar
+                        mode="single"
+                        selected={dateFilterStart}
+                        onSelect={setDateFilterStart}
+                        locale={ptBR}
+                      />
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1 px-1">Até</p>
+                      <Calendar
+                        mode="single"
+                        selected={dateFilterEnd}
+                        onSelect={setDateFilterEnd}
+                        locale={ptBR}
+                      />
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+              
+              {/* Clear Filters */}
+              {hasActiveFilters && (
+                <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-1">
+                  <X className="h-4 w-4" />
+                  Limpar
+                </Button>
+              )}
+              
+              <div className="flex-1" />
+              
+              {/* Auto-refresh controls */}
+              <div className="flex items-center gap-2">
+                {autoRefresh && campaigns.some(c => ['running', 'pending', 'paused'].includes(c.status)) && (
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {countdown}s
+                  </span>
+                )}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setAutoRefresh(!autoRefresh)}
+                  title={autoRefresh ? "Desativar atualização automática" : "Ativar atualização automática"}
+                  className={cn(!autoRefresh && "text-muted-foreground")}
+                >
+                  {autoRefresh ? (
+                    <RefreshCw className="h-4 w-4 text-primary" />
+                  ) : (
+                    <Pause className="h-4 w-4" />
+                  )}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    loadData();
+                    setCountdown(30);
+                  }}
+                  disabled={loadingCampaigns}
+                  title="Atualizar agora"
+                >
+                  <RefreshCw className={cn("h-4 w-4", loadingCampaigns && "animate-spin")} />
+                </Button>
+              </div>
+            </div>
+            
+            {/* Results count */}
+            {hasActiveFilters && (
+              <p className="text-sm text-muted-foreground">
+                Mostrando {filteredCampaigns.length} de {campaigns.length} campanha(s)
+              </p>
+            )}
+
             {loadingCampaigns && campaigns.length === 0 ? (
               <div className="flex items-center justify-center p-8">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
               </div>
-            ) : campaigns.length === 0 ? (
+            ) : filteredCampaigns.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
                 <Send className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>Nenhuma campanha criada</p>
-                <p className="text-sm">Clique em "Nova Campanha" para começar</p>
+                {hasActiveFilters ? (
+                  <>
+                    <p>Nenhuma campanha encontrada</p>
+                    <p className="text-sm">Tente ajustar os filtros</p>
+                    <Button variant="link" onClick={clearFilters} className="mt-2">
+                      Limpar filtros
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <p>Nenhuma campanha criada</p>
+                    <p className="text-sm">Clique em "Nova Campanha" para começar</p>
+                  </>
+                )}
               </div>
             ) : (
-              campaigns.map((campaign, index) => {
+              filteredCampaigns.map((campaign, index) => {
                 const config = statusConfig[campaign.status] || statusConfig.pending;
                 const StatusIcon = config.icon;
                 const progress = getProgress(campaign);
