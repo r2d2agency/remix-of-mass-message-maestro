@@ -1,4 +1,4 @@
-const API_URL = 'https://blaster-blasterback.isyhhh.easypanel.host';
+const API_URL = 'https://whastsale-backend.exf0ty.easypanel.host';
 
 interface ApiOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
