@@ -145,6 +145,7 @@ router.post('/lists/:listId/import', async (req, res) => {
       return res.status(404).json({ error: 'Lista não encontrada' });
     }
 
+    // Normalize contacts
     const normalized = contacts.map((c) => ({
       name: String(c?.name || '').trim(),
       phone: String(c?.phone || '').trim(),
@@ -155,16 +156,43 @@ router.post('/lists/:listId/import', async (req, res) => {
       return res.status(400).json({ error: 'Lista de contatos inválida' });
     }
 
-    // Insert contacts in batch
-    const values = normalized.map((c, i) => `($1, $${i * 3 + 2}, $${i * 3 + 3}, $${i * 3 + 4})`).join(', ');
-    const params = [listId, ...normalized.flatMap((c) => [c.name, c.phone, c.is_whatsapp])];
-
-    await query(
-      `INSERT INTO contacts (list_id, name, phone, is_whatsapp) VALUES ${values}`,
-      params
+    // Get existing phones in this list to detect duplicates
+    const existingResult = await query(
+      'SELECT phone FROM contacts WHERE list_id = $1',
+      [listId]
     );
+    const existingPhones = new Set(existingResult.rows.map(r => r.phone));
 
-    res.json({ success: true, imported: normalized.length });
+    // Also check for duplicates within the import batch
+    const seenPhones = new Set();
+    const uniqueContacts = [];
+    let duplicateCount = 0;
+
+    for (const contact of normalized) {
+      if (existingPhones.has(contact.phone) || seenPhones.has(contact.phone)) {
+        duplicateCount++;
+      } else {
+        seenPhones.add(contact.phone);
+        uniqueContacts.push(contact);
+      }
+    }
+
+    // Insert only unique contacts
+    if (uniqueContacts.length > 0) {
+      const values = uniqueContacts.map((c, i) => `($1, $${i * 3 + 2}, $${i * 3 + 3}, $${i * 3 + 4})`).join(', ');
+      const params = [listId, ...uniqueContacts.flatMap((c) => [c.name, c.phone, c.is_whatsapp])];
+
+      await query(
+        `INSERT INTO contacts (list_id, name, phone, is_whatsapp) VALUES ${values}`,
+        params
+      );
+    }
+
+    res.json({ 
+      success: true, 
+      imported: uniqueContacts.length,
+      duplicates: duplicateCount
+    });
   } catch (error) {
     console.error('Import contacts error:', error);
     res.status(500).json({ error: 'Erro ao importar contatos' });
