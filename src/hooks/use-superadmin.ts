@@ -319,14 +319,23 @@ export function useSuperadmin() {
   // ORGANIZATION MEMBERS
   // ============================================
 
-  const getOrganizationMembers = useCallback(async (orgId: string): Promise<OrgMember[]> => {
+  const getOrganizationMembers = useCallback(async (orgId: string): Promise<{
+    members: OrgMember[];
+    limits: {
+      max_users: number;
+      max_supervisors: number;
+      current_users: number;
+      current_supervisors: number;
+      plan_name: string;
+    };
+  }> => {
     try {
       const response = await fetch(`${API_URL}/api/admin/organizations/${orgId}/members`, { headers: getHeaders() });
       if (!response.ok) throw new Error('Acesso negado');
       return response.json();
     } catch (err) {
       console.error('Get org members error:', err);
-      return [];
+      return { members: [], limits: { max_users: 0, max_supervisors: 0, current_users: 0, current_supervisors: 0, plan_name: '' } };
     }
   }, []);
 
