@@ -665,7 +665,7 @@ router.get('/conversations/:id/messages', authenticate, async (req, res) => {
   }
 });
 
-// Send message
+// Send message (optimistic: save DB first, send to WhatsApp async)
 router.post('/conversations/:id/messages', authenticate, async (req, res) => {
   try {
     const { id } = req.params;
@@ -696,98 +696,16 @@ router.post('/conversations/:id/messages', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'Conexão não está ativa' });
     }
 
-    // Send via Evolution API
-    const remoteJid = conversation.remote_jid;
-    let evolutionEndpoint;
-    let evolutionBody;
-
-    // Get quoted message key if replying
-    let quotedMessageKey = null;
-    if (quoted_message_id) {
-      const quotedMsg = await query(
-        `SELECT message_id FROM chat_messages WHERE id = $1`,
-        [quoted_message_id]
-      );
-      if (quotedMsg.rows.length > 0 && quotedMsg.rows[0].message_id) {
-        quotedMessageKey = quotedMsg.rows[0].message_id;
-      }
-    }
-
-    if (message_type === 'text') {
-      evolutionEndpoint = `/message/sendText/${conversation.instance_name}`;
-      evolutionBody = {
-        number: remoteJid,
-        text: content,
-      };
-      if (quotedMessageKey) {
-        evolutionBody.quoted = {
-          key: {
-            remoteJid: remoteJid,
-            id: quotedMessageKey,
-          },
-        };
-      }
-    } else if (message_type === 'audio') {
-      evolutionEndpoint = `/message/sendWhatsAppAudio/${conversation.instance_name}`;
-      evolutionBody = {
-        number: remoteJid,
-        audio: media_url,
-        delay: 1200,
-      };
-      if (quotedMessageKey) {
-        evolutionBody.quoted = {
-          key: {
-            remoteJid: remoteJid,
-            id: quotedMessageKey,
-          },
-        };
-      }
-    } else {
-      // image, video, document
-      evolutionEndpoint = `/message/sendMedia/${conversation.instance_name}`;
-      evolutionBody = {
-        number: remoteJid,
-        mediatype: message_type,
-        media: media_url,
-      };
-      if (content) {
-        evolutionBody.caption = content;
-      }
-      if (quotedMessageKey) {
-        evolutionBody.quoted = {
-          key: {
-            remoteJid: remoteJid,
-            id: quotedMessageKey,
-          },
-        };
-      }
-    }
-
-    const evolutionResponse = await fetch(`${conversation.api_url}${evolutionEndpoint}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: conversation.api_key,
-      },
-      body: JSON.stringify(evolutionBody),
-    });
-
-    if (!evolutionResponse.ok) {
-      const errorData = await evolutionResponse.json().catch(() => ({}));
-      throw new Error(errorData.message || 'Falha ao enviar mensagem');
-    }
-
-    const evolutionResult = await evolutionResponse.json();
-
-    // Save message to database
+    // ============================================================
+    // OPTIMISTIC: Save message to DB first with status='pending'
+    // ============================================================
     const messageResult = await query(
       `INSERT INTO chat_messages 
         (conversation_id, message_id, from_me, sender_id, content, message_type, media_url, media_mimetype, quoted_message_id, status, timestamp)
-       VALUES ($1, $2, true, $3, $4, $5, $6, $7, $8, 'sent', NOW())
+       VALUES ($1, NULL, true, $2, $3, $4, $5, $6, $7, 'pending', NOW())
        RETURNING *`,
       [
         id,
-        evolutionResult.key?.id || null,
         req.userId,
         content,
         message_type,
@@ -797,13 +715,120 @@ router.post('/conversations/:id/messages', authenticate, async (req, res) => {
       ]
     );
 
-    // Update conversation last_message_at
+    const savedMessage = messageResult.rows[0];
+
+    // Update conversation last_message_at immediately
     await query(
       `UPDATE conversations SET last_message_at = NOW(), updated_at = NOW() WHERE id = $1`,
       [id]
     );
 
-    res.status(201).json(messageResult.rows[0]);
+    // ============================================================
+    // Return response immediately (optimistic)
+    // ============================================================
+    res.status(201).json(savedMessage);
+
+    // ============================================================
+    // ASYNC: Send to Evolution API in background
+    // ============================================================
+    (async () => {
+      try {
+        const remoteJid = conversation.remote_jid;
+        let evolutionEndpoint;
+        let evolutionBody;
+
+        // Get quoted message key if replying
+        let quotedMessageKey = null;
+        if (quoted_message_id) {
+          const quotedMsg = await query(
+            `SELECT message_id FROM chat_messages WHERE id = $1`,
+            [quoted_message_id]
+          );
+          if (quotedMsg.rows.length > 0 && quotedMsg.rows[0].message_id) {
+            quotedMessageKey = quotedMsg.rows[0].message_id;
+          }
+        }
+
+        if (message_type === 'text') {
+          evolutionEndpoint = `/message/sendText/${conversation.instance_name}`;
+          evolutionBody = {
+            number: remoteJid,
+            text: content,
+          };
+          if (quotedMessageKey) {
+            evolutionBody.quoted = {
+              key: {
+                remoteJid: remoteJid,
+                id: quotedMessageKey,
+              },
+            };
+          }
+        } else if (message_type === 'audio') {
+          evolutionEndpoint = `/message/sendWhatsAppAudio/${conversation.instance_name}`;
+          evolutionBody = {
+            number: remoteJid,
+            audio: media_url,
+            delay: 1200,
+          };
+          if (quotedMessageKey) {
+            evolutionBody.quoted = {
+              key: {
+                remoteJid: remoteJid,
+                id: quotedMessageKey,
+              },
+            };
+          }
+        } else {
+          // image, video, document
+          evolutionEndpoint = `/message/sendMedia/${conversation.instance_name}`;
+          evolutionBody = {
+            number: remoteJid,
+            mediatype: message_type,
+            media: media_url,
+          };
+          if (content) {
+            evolutionBody.caption = content;
+          }
+          if (quotedMessageKey) {
+            evolutionBody.quoted = {
+              key: {
+                remoteJid: remoteJid,
+                id: quotedMessageKey,
+              },
+            };
+          }
+        }
+
+        const evolutionResponse = await fetch(`${conversation.api_url}${evolutionEndpoint}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: conversation.api_key,
+          },
+          body: JSON.stringify(evolutionBody),
+        });
+
+        if (!evolutionResponse.ok) {
+          const errorData = await evolutionResponse.json().catch(() => ({}));
+          throw new Error(errorData.message || 'Falha ao enviar mensagem');
+        }
+
+        const evolutionResult = await evolutionResponse.json();
+
+        // Update message with Evolution message_id and status='sent'
+        await query(
+          `UPDATE chat_messages SET message_id = $1, status = 'sent' WHERE id = $2`,
+          [evolutionResult.key?.id || null, savedMessage.id]
+        );
+      } catch (bgError) {
+        console.error('Background Evolution send error:', bgError.message);
+        // Mark as failed so UI can show error state
+        await query(
+          `UPDATE chat_messages SET status = 'failed' WHERE id = $1`,
+          [savedMessage.id]
+        ).catch(() => {});
+      }
+    })();
   } catch (error) {
     console.error('Send message error:', error);
     res.status(500).json({ error: error.message || 'Erro ao enviar mensagem' });
