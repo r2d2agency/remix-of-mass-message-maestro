@@ -104,15 +104,15 @@ export const useContacts = () => {
     }
   }, []);
 
-  const importContacts = useCallback(async (listId: string, contacts: { name: string; phone: string; is_whatsapp?: boolean | null }[]): Promise<number> => {
+  const importContacts = useCallback(async (listId: string, contacts: { name: string; phone: string; is_whatsapp?: boolean | null }[]): Promise<{ imported: number; duplicates: number }> => {
     setLoading(true);
     setError(null);
     try {
-      const data = await api<{ imported: number }>(`/api/contacts/lists/${listId}/import`, {
+      const data = await api<{ imported: number; duplicates: number }>(`/api/contacts/lists/${listId}/import`, {
         method: 'POST',
         body: { contacts },
       });
-      return data.imported;
+      return { imported: data.imported, duplicates: data.duplicates || 0 };
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Erro ao importar contatos';
       setError(message);

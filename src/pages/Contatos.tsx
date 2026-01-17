@@ -181,7 +181,7 @@ const Contatos = () => {
     }
 
     try {
-      const count = await importContacts(
+      const result = await importContacts(
         selectedList,
         contactsToImport.map((c) => ({
           name: c.name,
@@ -189,7 +189,13 @@ const Contatos = () => {
           is_whatsapp: c.is_whatsapp ?? null,
         }))
       );
-      toast.success(`${count} contatos importados com sucesso!`);
+      
+      if (result.duplicates > 0) {
+        toast.success(`${result.imported} contatos importados! (${result.duplicates} duplicados ignorados)`);
+      } else {
+        toast.success(`${result.imported} contatos importados com sucesso!`);
+      }
+      
       loadContacts(selectedList);
       loadLists();
     } catch (err) {
