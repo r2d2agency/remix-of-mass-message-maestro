@@ -7,10 +7,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Plus, QrCode, RefreshCw, Plug, Unplug, Trash2, Phone, Loader2, Wifi, WifiOff, Send, Settings2, AlertTriangle, CheckCircle, Eye } from "lucide-react";
+import { Plus, QrCode, RefreshCw, Plug, Unplug, Trash2, Phone, Loader2, Wifi, WifiOff, Send, Settings2, AlertTriangle, CheckCircle, Eye, Activity } from "lucide-react";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { TestMessageDialog } from "@/components/conexao/TestMessageDialog";
+import { WebhookDiagnosticPanel } from "@/components/conexao/WebhookDiagnosticPanel";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -58,6 +59,10 @@ const Conexao = () => {
   const [webhookEventsLoading, setWebhookEventsLoading] = useState(false);
   const [webhookEventsError, setWebhookEventsError] = useState<string | null>(null);
   const [webhookEvents, setWebhookEvents] = useState<any[]>([]);
+  
+  // Diagnostic panel state (full panel view)
+  const [diagnosticPanelOpen, setDiagnosticPanelOpen] = useState(false);
+  const [diagnosticConnection, setDiagnosticConnection] = useState<Connection | null>(null);
 
   useEffect(() => {
     loadConnections();
@@ -477,14 +482,17 @@ const Conexao = () => {
                       </Button>
                     )}
 
-                    {/* Webhook Viewer */}
+                    {/* Full Diagnostic Panel */}
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
-                      onClick={() => handleOpenWebhookViewer(connection)}
-                      title="Ver o que o webhook está recebendo"
+                      onClick={() => {
+                        setDiagnosticConnection(connection);
+                        setDiagnosticPanelOpen(true);
+                      }}
+                      title="Painel de diagnóstico completo"
                     >
-                      <Eye className="h-4 w-4" />
+                      <Activity className="h-4 w-4" />
                     </Button>
                     
                     {/* Webhook Diagnostic */}
@@ -735,6 +743,24 @@ const Conexao = () => {
             setTestConnection(null);
           }}
         />
+        
+        {/* Diagnostic Panel Dialog */}
+        <Dialog 
+          open={diagnosticPanelOpen} 
+          onOpenChange={(open) => {
+            setDiagnosticPanelOpen(open);
+            if (!open) setDiagnosticConnection(null);
+          }}
+        >
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            {diagnosticConnection && (
+              <WebhookDiagnosticPanel 
+                connection={diagnosticConnection} 
+                onClose={() => setDiagnosticPanelOpen(false)}
+              />
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </MainLayout>
   );
