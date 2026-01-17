@@ -192,10 +192,7 @@ export async function executeCampaignMessages() {
         conn.status as connection_status,
         mt.items as message_items,
         co.name as contact_name,
-        co.email as contact_email,
-        co.company as contact_company,
-        co.position as contact_position,
-        co.notes as contact_notes
+        co.phone as contact_phone
       FROM campaign_messages cm
       JOIN campaigns c ON c.id = cm.campaign_id
       JOIN connections conn ON conn.id = c.connection_id
