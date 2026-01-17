@@ -340,8 +340,8 @@ export function ConversationList({
                     </span>
                   </div>
 
-                  {/* Tags and unread */}
-                  <div className="flex items-center gap-2 mt-1.5">
+                  {/* Tags row */}
+                  <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                     {conv.tags.slice(0, 2).map(tag => (
                       <Badge
                         key={tag.id}
@@ -357,13 +357,26 @@ export function ConversationList({
                         +{conv.tags.length - 2}
                       </span>
                     )}
+                  </div>
+
+                  {/* Connection name, Assigned user, and Unread count */}
+                  <div className="flex items-center gap-2 mt-1">
+                    {/* Connection name */}
+                    {conv.connection_name && (
+                      <span className="text-[10px] text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded truncate max-w-[80px]">
+                        {conv.connection_name}
+                      </span>
+                    )}
                     
-                    {/* Assigned */}
+                    {/* Assigned user */}
                     {conv.assigned_name && (
-                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 ml-auto">
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                         {conv.assigned_name.split(' ')[0]}
                       </Badge>
                     )}
+
+                    {/* Spacer */}
+                    <div className="flex-1" />
 
                     {/* Unread count */}
                     {conv.unread_count > 0 && (
