@@ -152,7 +152,13 @@ const Chat = () => {
     }
   };
 
-  const handleSendMessage = async (content: string, type: string = 'text', mediaUrl?: string, quotedMessageId?: string) => {
+  const handleSendMessage = async (
+    content: string,
+    type: string = 'text',
+    mediaUrl?: string,
+    quotedMessageId?: string,
+    mediaMimetype?: string
+  ) => {
     if (!selectedConversation) return;
 
     setSendingMessage(true);
@@ -161,6 +167,7 @@ const Chat = () => {
         content,
         message_type: type,
         media_url: mediaUrl,
+        media_mimetype: mediaMimetype,
         quoted_message_id: quotedMessageId,
       });
       
