@@ -866,6 +866,44 @@ async function handleMessageUpsert(connection, data) {
       return;
     }
 
+    // === EARLY CHECK: Skip messages that have no real content BEFORE creating conversation ===
+    const msgContent = message.message || message;
+    
+    // Check for message types we should ignore
+    if (msgContent.reactionMessage) {
+      console.log('Webhook: Ignoring reaction message (early check)');
+      return;
+    }
+    if (msgContent.protocolMessage || msgContent.senderKeyDistributionMessage) {
+      console.log('Webhook: Ignoring protocol/system message (early check)');
+      return;
+    }
+    if (msgContent.messageContextInfo && Object.keys(msgContent).length <= 2) {
+      console.log('Webhook: Ignoring message with only context info (early check)');
+      return;
+    }
+    
+    // Check if there's any meaningful content
+    const hasTextContent = msgContent.conversation || msgContent.extendedTextMessage || 
+                           message.body || message.text;
+    const hasMediaContent = msgContent.imageMessage || msgContent.videoMessage || 
+                            msgContent.audioMessage || msgContent.documentMessage || 
+                            msgContent.stickerMessage;
+    const hasOtherContent = msgContent.contactMessage || msgContent.locationMessage;
+    
+    if (!hasTextContent && !hasMediaContent && !hasOtherContent) {
+      // Check for any unknown but potentially valid content
+      const knownMetaKeys = ['messageContextInfo', 'senderKeyDistributionMessage', 'protocolMessage', 'reactionMessage'];
+      const contentKeys = Object.keys(msgContent).filter(k => !knownMetaKeys.includes(k));
+      
+      if (contentKeys.length === 0) {
+        console.log('Webhook: Ignoring message with no extractable content (early check)');
+        return;
+      }
+      console.log('Webhook: Unknown message type detected, keys:', contentKeys);
+    }
+    // === END EARLY CHECK ===
+
     // Skip @lid messages if we can use normal format
     const isLidFormat = rawRemoteJid.includes('@lid');
     
