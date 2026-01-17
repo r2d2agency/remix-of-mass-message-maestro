@@ -150,20 +150,21 @@ export function MessageNotifications() {
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-80 p-0" align="end">
+      <PopoverContent 
+        className="w-[calc(100vw-1rem)] max-w-80 p-0 mx-2 sm:mx-0 sm:w-80" 
+        align="end"
+        sideOffset={8}
+      >
         <div className="flex items-center justify-between p-3 border-b">
           <h4 className="font-semibold text-sm flex items-center gap-2">
             <MessageSquare className="h-4 w-4" />
-            Mensagens não lidas
+            <span className="truncate">Mensagens não lidas</span>
           </h4>
-          <div className="flex items-center gap-2">
-            <Label htmlFor="sound-toggle" className="sr-only">
-              Som de notificação
-            </Label>
+          <div className="flex items-center gap-1">
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7"
+              className="h-8 w-8 sm:h-7 sm:w-7"
               onClick={() => setSoundEnabled(!soundEnabled)}
               title={soundEnabled ? "Desativar som" : "Ativar som"}
             >
@@ -176,10 +177,10 @@ export function MessageNotifications() {
           </div>
         </div>
 
-        <ScrollArea className="max-h-[300px]">
+        <ScrollArea className="max-h-[60vh] sm:max-h-[300px]">
           {unreadConversations.length === 0 ? (
-            <div className="p-4 text-center text-sm text-muted-foreground">
-              <BellOff className="h-8 w-8 mx-auto mb-2 opacity-50" />
+            <div className="p-6 sm:p-4 text-center text-sm text-muted-foreground">
+              <BellOff className="h-10 w-10 sm:h-8 sm:w-8 mx-auto mb-2 opacity-50" />
               Nenhuma mensagem não lida
             </div>
           ) : (
@@ -187,11 +188,11 @@ export function MessageNotifications() {
               {unreadConversations.map((conv) => (
                 <div
                   key={conv.id}
-                  className="p-3 hover:bg-muted/50 cursor-pointer transition-colors group"
+                  className="p-3 sm:p-3 hover:bg-muted/50 active:bg-muted/70 cursor-pointer transition-colors group"
                   onClick={() => handleGoToConversation(conv.id)}
                 >
                   <div className="flex items-start gap-3">
-                    <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                    <div className="flex-shrink-0 w-11 h-11 sm:w-10 sm:h-10 rounded-full bg-primary/10 flex items-center justify-center">
                       <MessageSquare className="h-5 w-5 text-primary" />
                     </div>
                     <div className="flex-1 min-w-0">
@@ -203,17 +204,17 @@ export function MessageNotifications() {
                           {conv.unread_count}
                         </Badge>
                       </div>
-                      <p className="text-xs text-muted-foreground truncate">
+                      <p className="text-xs text-muted-foreground truncate mt-0.5">
                         {formatMessagePreview(conv)}
                       </p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-[10px] text-muted-foreground">
+                      <div className="flex items-center gap-2 mt-1.5 sm:mt-1">
+                        <span className="text-[10px] text-muted-foreground truncate max-w-[100px]">
                           {conv.connection_name}
                         </span>
                         {conv.last_message_at && (
                           <>
                             <span className="text-[10px] text-muted-foreground">•</span>
-                            <span className="text-[10px] text-muted-foreground">
+                            <span className="text-[10px] text-muted-foreground whitespace-nowrap">
                               {format(new Date(conv.last_message_at), "HH:mm", { locale: ptBR })}
                             </span>
                           </>
@@ -223,14 +224,14 @@ export function MessageNotifications() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-6 w-6 opacity-0 group-hover:opacity-100 flex-shrink-0"
+                      className="h-8 w-8 sm:h-6 sm:w-6 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 flex-shrink-0 -mr-1"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleClearNotification(conv.id);
                       }}
                       title="Marcar como lida"
                     >
-                      <X className="h-3 w-3" />
+                      <X className="h-4 w-4 sm:h-3 sm:w-3" />
                     </Button>
                   </div>
                 </div>
@@ -244,7 +245,7 @@ export function MessageNotifications() {
             <Button
               variant="ghost"
               size="sm"
-              className="w-full text-xs"
+              className="w-full text-sm sm:text-xs h-10 sm:h-8"
               onClick={() => {
                 setIsOpen(false);
                 window.location.href = "/chat";
