@@ -511,4 +511,402 @@ router.get('/:connectionId/info', authenticate, async (req, res) => {
   }
 });
 
+// ==========================================
+// WEBHOOK - Receive messages from Evolution API
+// ==========================================
+
+// Evolution API Webhook - receives real-time messages
+// This endpoint should be public (no authentication)
+router.post('/webhook', async (req, res) => {
+  try {
+    const payload = req.body;
+    
+    console.log('Webhook received:', JSON.stringify(payload, null, 2));
+
+    // Evolution API sends different event types
+    const event = payload.event;
+    const instanceName = payload.instance;
+    const data = payload.data;
+
+    if (!instanceName || !data) {
+      console.log('Webhook: Missing instance or data');
+      return res.status(200).json({ received: true });
+    }
+
+    // Find the connection by instance name
+    const connResult = await query(
+      'SELECT * FROM connections WHERE instance_name = $1',
+      [instanceName]
+    );
+
+    if (connResult.rows.length === 0) {
+      console.log('Webhook: Connection not found for instance:', instanceName);
+      return res.status(200).json({ received: true });
+    }
+
+    const connection = connResult.rows[0];
+
+    // Handle different event types
+    switch (event) {
+      case 'messages.upsert':
+        await handleMessageUpsert(connection, data);
+        break;
+      
+      case 'messages.update':
+        await handleMessageUpdate(connection, data);
+        break;
+      
+      case 'connection.update':
+        await handleConnectionUpdate(connection, data);
+        break;
+      
+      case 'qrcode.updated':
+        // QR code updated, connection is trying to connect
+        console.log('QR Code updated for instance:', instanceName);
+        break;
+      
+      default:
+        console.log('Webhook: Unhandled event type:', event);
+    }
+
+    res.status(200).json({ received: true });
+  } catch (error) {
+    console.error('Webhook error:', error);
+    // Always return 200 to acknowledge receipt
+    res.status(200).json({ received: true, error: error.message });
+  }
+});
+
+// Handle incoming/outgoing messages
+async function handleMessageUpsert(connection, data) {
+  try {
+    const message = data.message || data;
+    const key = data.key || message.key;
+    
+    if (!key) {
+      console.log('Webhook: No message key found');
+      return;
+    }
+
+    const remoteJid = key.remoteJid;
+    const messageId = key.id;
+    const fromMe = key.fromMe || false;
+    const pushName = message.pushName || data.pushName;
+
+    // Skip status messages and group messages for now
+    if (remoteJid === 'status@broadcast' || remoteJid.includes('@g.us')) {
+      console.log('Webhook: Skipping broadcast/group message');
+      return;
+    }
+
+    // Extract phone number from remoteJid
+    const contactPhone = remoteJid.replace('@s.whatsapp.net', '').replace('@c.us', '');
+
+    // Find or create conversation
+    let convResult = await query(
+      `SELECT * FROM conversations WHERE connection_id = $1 AND remote_jid = $2`,
+      [connection.id, remoteJid]
+    );
+
+    let conversationId;
+
+    if (convResult.rows.length === 0) {
+      // Create new conversation
+      const newConv = await query(
+        `INSERT INTO conversations (connection_id, remote_jid, contact_name, contact_phone, last_message_at, unread_count)
+         VALUES ($1, $2, $3, $4, NOW(), $5)
+         RETURNING id`,
+        [connection.id, remoteJid, pushName || contactPhone, contactPhone, fromMe ? 0 : 1]
+      );
+      conversationId = newConv.rows[0].id;
+      console.log('Webhook: Created new conversation:', conversationId);
+    } else {
+      conversationId = convResult.rows[0].id;
+      
+      // Update conversation
+      if (!fromMe) {
+        await query(
+          `UPDATE conversations 
+           SET last_message_at = NOW(), 
+               unread_count = unread_count + 1,
+               contact_name = COALESCE(NULLIF($2, ''), contact_name),
+               updated_at = NOW()
+           WHERE id = $1`,
+          [conversationId, pushName]
+        );
+      } else {
+        await query(
+          `UPDATE conversations SET last_message_at = NOW(), updated_at = NOW() WHERE id = $1`,
+          [conversationId]
+        );
+      }
+    }
+
+    // Check if message already exists
+    const existingMsg = await query(
+      `SELECT id FROM chat_messages WHERE message_id = $1`,
+      [messageId]
+    );
+
+    if (existingMsg.rows.length > 0) {
+      console.log('Webhook: Message already exists:', messageId);
+      return;
+    }
+
+    // Extract message content and type
+    let content = '';
+    let messageType = 'text';
+    let mediaUrl = null;
+    let mediaMimetype = null;
+    let quotedMessageId = null;
+
+    const msgContent = message.message || message;
+
+    if (msgContent.conversation) {
+      content = msgContent.conversation;
+      messageType = 'text';
+    } else if (msgContent.extendedTextMessage) {
+      content = msgContent.extendedTextMessage.text;
+      messageType = 'text';
+      if (msgContent.extendedTextMessage.contextInfo?.quotedMessage) {
+        quotedMessageId = msgContent.extendedTextMessage.contextInfo.stanzaId;
+      }
+    } else if (msgContent.imageMessage) {
+      messageType = 'image';
+      content = msgContent.imageMessage.caption || '';
+      mediaUrl = msgContent.imageMessage.url || data.media?.url;
+      mediaMimetype = msgContent.imageMessage.mimetype;
+    } else if (msgContent.videoMessage) {
+      messageType = 'video';
+      content = msgContent.videoMessage.caption || '';
+      mediaUrl = msgContent.videoMessage.url || data.media?.url;
+      mediaMimetype = msgContent.videoMessage.mimetype;
+    } else if (msgContent.audioMessage) {
+      messageType = 'audio';
+      mediaUrl = msgContent.audioMessage.url || data.media?.url;
+      mediaMimetype = msgContent.audioMessage.mimetype;
+    } else if (msgContent.documentMessage) {
+      messageType = 'document';
+      content = msgContent.documentMessage.fileName || '';
+      mediaUrl = msgContent.documentMessage.url || data.media?.url;
+      mediaMimetype = msgContent.documentMessage.mimetype;
+    } else if (msgContent.stickerMessage) {
+      messageType = 'sticker';
+      mediaUrl = msgContent.stickerMessage.url || data.media?.url;
+      mediaMimetype = msgContent.stickerMessage.mimetype;
+    } else if (msgContent.contactMessage) {
+      messageType = 'contact';
+      content = msgContent.contactMessage.displayName || 'Contato';
+    } else if (msgContent.locationMessage) {
+      messageType = 'location';
+      content = `${msgContent.locationMessage.degreesLatitude},${msgContent.locationMessage.degreesLongitude}`;
+    } else {
+      // Try to get text from other message types
+      content = message.body || message.text || JSON.stringify(msgContent).substring(0, 500);
+    }
+
+    // If Evolution provides media URL directly
+    if (data.media?.url && !mediaUrl) {
+      mediaUrl = data.media.url;
+    }
+
+    // Get message timestamp
+    const timestamp = message.messageTimestamp 
+      ? new Date(parseInt(message.messageTimestamp) * 1000) 
+      : new Date();
+
+    // Insert message
+    await query(
+      `INSERT INTO chat_messages 
+        (conversation_id, message_id, from_me, content, message_type, media_url, media_mimetype, quoted_message_id, status, timestamp)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [
+        conversationId,
+        messageId,
+        fromMe,
+        content,
+        messageType,
+        mediaUrl,
+        mediaMimetype,
+        quotedMessageId,
+        fromMe ? 'sent' : 'received',
+        timestamp
+      ]
+    );
+
+    console.log('Webhook: Message saved:', messageId, 'Type:', messageType, 'FromMe:', fromMe);
+  } catch (error) {
+    console.error('Handle message upsert error:', error);
+  }
+}
+
+// Handle message status updates (delivered, read, etc)
+async function handleMessageUpdate(connection, data) {
+  try {
+    const updates = Array.isArray(data) ? data : [data];
+
+    for (const update of updates) {
+      const messageId = update.key?.id || update.id;
+      const status = update.status;
+
+      if (!messageId) continue;
+
+      // Map Evolution status to our status
+      let newStatus = null;
+      switch (status) {
+        case 1: // PENDING
+          newStatus = 'pending';
+          break;
+        case 2: // SENT (server received)
+          newStatus = 'sent';
+          break;
+        case 3: // DELIVERED
+          newStatus = 'delivered';
+          break;
+        case 4: // READ
+          newStatus = 'read';
+          break;
+        case 5: // PLAYED (for audio)
+          newStatus = 'played';
+          break;
+      }
+
+      if (newStatus) {
+        await query(
+          `UPDATE chat_messages SET status = $1 WHERE message_id = $2`,
+          [newStatus, messageId]
+        );
+        console.log('Webhook: Message status updated:', messageId, '->', newStatus);
+      }
+    }
+  } catch (error) {
+    console.error('Handle message update error:', error);
+  }
+}
+
+// Handle connection status changes
+async function handleConnectionUpdate(connection, data) {
+  try {
+    const state = data.state || data.status;
+    let newStatus = 'disconnected';
+
+    if (state === 'open' || state === 'connected') {
+      newStatus = 'connected';
+    } else if (state === 'connecting') {
+      newStatus = 'connecting';
+    }
+
+    await query(
+      `UPDATE connections SET status = $1, updated_at = NOW() WHERE id = $2`,
+      [newStatus, connection.id]
+    );
+
+    console.log('Webhook: Connection status updated:', connection.instance_name, '->', newStatus);
+  } catch (error) {
+    console.error('Handle connection update error:', error);
+  }
+}
+
+// Configure webhook on Evolution API
+router.post('/:connectionId/configure-webhook', authenticate, async (req, res) => {
+  try {
+    const { connectionId } = req.params;
+    const { webhookUrl } = req.body;
+
+    // Get connection
+    const connResult = await query(
+      'SELECT * FROM connections WHERE id = $1 AND user_id = $2',
+      [connectionId, req.userId]
+    );
+
+    if (connResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Conexão não encontrada' });
+    }
+
+    const connection = connResult.rows[0];
+
+    // Configure webhook on Evolution API
+    const webhookConfig = {
+      url: webhookUrl,
+      webhook_by_events: false,
+      webhook_base64: true, // Receive media as base64
+      events: [
+        'APPLICATION_STARTUP',
+        'QRCODE_UPDATED',
+        'MESSAGES_SET',
+        'MESSAGES_UPSERT',
+        'MESSAGES_UPDATE',
+        'MESSAGES_DELETE',
+        'SEND_MESSAGE',
+        'CONTACTS_SET',
+        'CONTACTS_UPSERT',
+        'CONTACTS_UPDATE',
+        'PRESENCE_UPDATE',
+        'CHATS_SET',
+        'CHATS_UPSERT',
+        'CHATS_UPDATE',
+        'CHATS_DELETE',
+        'GROUPS_UPSERT',
+        'GROUPS_UPDATE',
+        'GROUP_PARTICIPANTS_UPDATE',
+        'CONNECTION_UPDATE',
+        'CALL',
+        'LABELS_EDIT',
+        'LABELS_ASSOCIATION'
+      ]
+    };
+
+    await evolutionRequest(`/webhook/set/${connection.instance_name}`, 'POST', webhookConfig);
+
+    // Save webhook URL to database
+    await query(
+      `UPDATE connections SET webhook_url = $1, updated_at = NOW() WHERE id = $2`,
+      [webhookUrl, connectionId]
+    );
+
+    res.json({ success: true, message: 'Webhook configurado com sucesso' });
+  } catch (error) {
+    console.error('Configure webhook error:', error);
+    res.status(500).json({ error: 'Erro ao configurar webhook' });
+  }
+});
+
+// Get current webhook config
+router.get('/:connectionId/webhook', authenticate, async (req, res) => {
+  try {
+    const { connectionId } = req.params;
+
+    // Get connection
+    const connResult = await query(
+      'SELECT * FROM connections WHERE id = $1 AND user_id = $2',
+      [connectionId, req.userId]
+    );
+
+    if (connResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Conexão não encontrada' });
+    }
+
+    const connection = connResult.rows[0];
+
+    // Get webhook config from Evolution
+    try {
+      const webhookResult = await evolutionRequest(`/webhook/find/${connection.instance_name}`, 'GET');
+      res.json({
+        configured: true,
+        url: webhookResult.url || connection.webhook_url,
+        events: webhookResult.events || [],
+      });
+    } catch (e) {
+      res.json({
+        configured: false,
+        url: connection.webhook_url || null,
+        events: [],
+      });
+    }
+  } catch (error) {
+    console.error('Get webhook error:', error);
+    res.status(500).json({ error: 'Erro ao buscar webhook' });
+  }
+});
+
 export default router;
