@@ -3,6 +3,7 @@ import cors from 'cors';
 import path from 'path';
 import dotenv from 'dotenv';
 import cron from 'node-cron';
+import crypto from 'crypto';
 import authRoutes from './routes/auth.js';
 import connectionsRoutes from './routes/connections.js';
 import messagesRoutes from './routes/messages.js';
@@ -20,6 +21,8 @@ import { initDatabase } from './init-db.js';
 import { executeNotifications } from './scheduler.js';
 import { executeCampaignMessages } from './campaign-scheduler.js';
 import { executeScheduledMessages } from './scheduled-messages.js';
+import { requestContext } from './request-context.js';
+import { log, logError } from './logger.js';
 
 dotenv.config();
 
@@ -46,6 +49,7 @@ app.options('*', (req, res) => {
   res.sendStatus(200);
 });
 
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
@@ -53,9 +57,10 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 const uploadsDir = path.join(process.cwd(), 'uploads');
 app.use('/uploads', (req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type');
-  res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range');
+  res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges');
+  res.setHeader('Accept-Ranges', 'bytes');
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
   next();
 }, express.static(uploadsDir, {
@@ -68,13 +73,19 @@ app.use('/uploads', (req, res, next) => {
       res.setHeader('Content-Type', 'audio/mpeg');
     } else if (ext === '.m4a') {
       res.setHeader('Content-Type', 'audio/mp4');
+    } else if (ext === '.wav') {
+      res.setHeader('Content-Type', 'audio/wav');
+    } else if (ext === '.aac') {
+      res.setHeader('Content-Type', 'audio/aac');
     } else if (ext === '.mp4') {
       res.setHeader('Content-Type', 'video/mp4');
     } else if (ext === '.webm') {
-      res.setHeader('Content-Type', 'video/webm');
+      // Many voice notes are stored as .webm; prefer audio/webm for broad compatibility
+      res.setHeader('Content-Type', 'audio/webm');
     }
   }
 }));
+
 
 // Routes
 app.use('/api/auth', authRoutes);

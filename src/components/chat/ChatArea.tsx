@@ -90,7 +90,7 @@ interface ChatAreaProps {
   tags: ConversationTag[];
   team: TeamMember[];
   onSyncHistory?: (days: number) => Promise<void>;
-  onSendMessage: (content: string, type?: string, mediaUrl?: string, quotedMessageId?: string) => Promise<void>;
+  onSendMessage: (content: string, type?: string, mediaUrl?: string, quotedMessageId?: string, mediaMimetype?: string) => Promise<void>;
   onLoadMore: () => void;
   hasMore: boolean;
   onAddTag: (tagId: string) => void;
@@ -357,8 +357,8 @@ export function ChatArea({
         if (file.type.startsWith('image/')) type = 'image';
         else if (file.type.startsWith('video/')) type = 'video';
         else if (file.type.startsWith('audio/')) type = 'audio';
-        
-        await onSendMessage('', type, url);
+
+        await onSendMessage('', type, url, undefined, file.type);
         toast.success("Arquivo enviado!");
       }
     } catch (error) {
@@ -372,17 +372,17 @@ export function ChatArea({
 
   const handleSendAudio = async () => {
     if (!audioBlob) return;
-    
+
     try {
       // Create a file from the blob
-      const extension = audioBlob.type.includes('webm') ? 'webm' 
-        : audioBlob.type.includes('mp4') ? 'm4a' 
+      const extension = audioBlob.type.includes('webm') ? 'webm'
+        : audioBlob.type.includes('mp4') ? 'm4a'
         : 'wav';
       const file = new File([audioBlob], `audio.${extension}`, { type: audioBlob.type });
-      
+
       const url = await uploadFile(file);
       if (url) {
-        await onSendMessage('', 'audio', url);
+        await onSendMessage('', 'audio', url, undefined, file.type);
         toast.success("Áudio enviado!");
       }
       clearAudio();

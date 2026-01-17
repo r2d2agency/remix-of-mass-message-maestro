@@ -1,5 +1,6 @@
 import pg from 'pg';
 import dotenv from 'dotenv';
+import { logError, logInfo } from './logger.js';
 
 dotenv.config();
 
@@ -8,11 +9,11 @@ const { Pool } = pg;
 // Parse DATABASE_URL manually to handle special characters in password
 function parseConnectionString(url) {
   if (!url) return {};
-  
+
   // Format: postgres://user:password@host:port/database?options
   const regex = /^postgres(?:ql)?:\/\/([^:]+):(.+)@([^:]+):(\d+)\/([^?]+)(?:\?(.*))?$/;
   const match = url.match(regex);
-  
+
   if (match) {
     const config = {
       user: match[1],
@@ -21,7 +22,7 @@ function parseConnectionString(url) {
       port: parseInt(match[4], 10),
       database: match[5],
     };
-    
+
     // Parse query options like sslmode
     if (match[6]) {
       const params = new URLSearchParams(match[6]);
@@ -31,16 +32,60 @@ function parseConnectionString(url) {
         config.ssl = { rejectUnauthorized: false };
       }
     }
-    
+
     return config;
   }
-  
+
   // Fallback to connectionString if parsing fails
   return { connectionString: url };
+}
+
+function summarizeSql(sql) {
+  return String(sql || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 500);
+}
+
+function paramTypes(params) {
+  if (!Array.isArray(params)) return [];
+  return params.map((v) => {
+    if (v === null) return 'null';
+    if (v === undefined) return 'undefined';
+    if (v instanceof Date) return 'Date';
+    if (Buffer.isBuffer(v)) return 'Buffer';
+    if (Array.isArray(v)) return 'Array';
+    return typeof v;
+  });
 }
 
 const dbConfig = parseConnectionString(process.env.DATABASE_URL);
 
 export const pool = new Pool(dbConfig);
 
-export const query = (text, params) => pool.query(text, params);
+export async function query(text, params) {
+  const startedAt = Date.now();
+  try {
+    const res = await pool.query(text, params);
+    const durationMs = Date.now() - startedAt;
+
+    if (durationMs > 800) {
+      logInfo('db.query_slow', {
+        duration_ms: durationMs,
+        sql: summarizeSql(text),
+      });
+    }
+
+    return res;
+  } catch (error) {
+    const durationMs = Date.now() - startedAt;
+    logError('db.query_failed', error, {
+      duration_ms: durationMs,
+      sql: summarizeSql(text),
+      param_count: Array.isArray(params) ? params.length : 0,
+      param_types: paramTypes(params),
+    });
+    throw error;
+  }
+}
+
