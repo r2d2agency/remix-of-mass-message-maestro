@@ -139,10 +139,90 @@ router.get('/limits', authenticate, async (req, res) => {
   }
 });
 
+// Webhook URL base - should be configured via environment variable
+const WEBHOOK_BASE_URL = process.env.WEBHOOK_BASE_URL || process.env.BACKEND_URL;
+
+// Configure webhook for an instance
+async function configureInstanceWebhook(instanceName, webhookUrl) {
+  try {
+    const webhookConfig = {
+      url: webhookUrl,
+      webhook_by_events: false,
+      webhook_base64: true,
+      events: [
+        'APPLICATION_STARTUP',
+        'QRCODE_UPDATED',
+        'MESSAGES_SET',
+        'MESSAGES_UPSERT',
+        'MESSAGES_UPDATE',
+        'MESSAGES_DELETE',
+        'SEND_MESSAGE',
+        'CONTACTS_SET',
+        'CONTACTS_UPSERT',
+        'CONTACTS_UPDATE',
+        'PRESENCE_UPDATE',
+        'CHATS_SET',
+        'CHATS_UPSERT',
+        'CHATS_UPDATE',
+        'CHATS_DELETE',
+        'GROUPS_UPSERT',
+        'GROUPS_UPDATE',
+        'GROUP_PARTICIPANTS_UPDATE',
+        'CONNECTION_UPDATE',
+        'CALL',
+        'LABELS_EDIT',
+        'LABELS_ASSOCIATION'
+      ]
+    };
+
+    await evolutionRequest(`/webhook/set/${instanceName}`, 'POST', webhookConfig);
+    console.log('Webhook configured for instance:', instanceName);
+    return true;
+  } catch (error) {
+    console.error('Failed to configure webhook for instance:', instanceName, error.message);
+    return false;
+  }
+}
+
+// Configure RabbitMQ for an instance (optional)
+async function configureInstanceRabbitMQ(instanceName) {
+  try {
+    const rabbitConfig = {
+      enabled: false // Disable by default, can be enabled later
+    };
+    await evolutionRequest(`/rabbitmq/set/${instanceName}`, 'POST', rabbitConfig);
+    return true;
+  } catch (error) {
+    console.log('RabbitMQ config skipped:', error.message);
+    return false;
+  }
+}
+
+// Configure instance settings
+async function configureInstanceSettings(instanceName) {
+  try {
+    const settings = {
+      reject_call: false,
+      msg_call: '',
+      groups_ignore: false,
+      always_online: false,
+      read_messages: false,
+      read_status: false,
+      sync_full_history: false
+    };
+    await evolutionRequest(`/settings/set/${instanceName}`, 'POST', settings);
+    console.log('Settings configured for instance:', instanceName);
+    return true;
+  } catch (error) {
+    console.log('Settings config skipped:', error.message);
+    return false;
+  }
+}
+
 // Create new Evolution instance
 router.post('/create', authenticate, async (req, res) => {
   try {
-    const { name } = req.body;
+    const { name, webhookUrl: customWebhookUrl } = req.body;
     let { organization_id } = req.body;
 
     if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
@@ -181,24 +261,53 @@ router.post('/create', authenticate, async (req, res) => {
     // Generate unique instance name
     const instanceName = generateInstanceName(organization_id, req.userId);
 
-    // Create instance on Evolution API
-    const createResult = await evolutionRequest('/instance/create', 'POST', {
+    // Determine webhook URL
+    const webhookUrl = customWebhookUrl || (WEBHOOK_BASE_URL ? `${WEBHOOK_BASE_URL}/api/evolution/webhook` : null);
+
+    // Create instance on Evolution API with webhook configuration
+    const createPayload = {
       instanceName,
       qrcode: true,
       integration: 'WHATSAPP-BAILEYS',
-    });
+    };
 
+    // If webhook URL is available, include it in creation
+    if (webhookUrl) {
+      createPayload.webhook = {
+        url: webhookUrl,
+        webhook_by_events: false,
+        webhook_base64: true,
+        events: [
+          'MESSAGES_UPSERT',
+          'MESSAGES_UPDATE',
+          'CONNECTION_UPDATE',
+          'QRCODE_UPDATED',
+          'SEND_MESSAGE'
+        ]
+      };
+    }
+
+    const createResult = await evolutionRequest('/instance/create', 'POST', createPayload);
     console.log('Evolution create result:', createResult);
 
     // Save connection to database
     const dbResult = await query(
-      `INSERT INTO connections (user_id, organization_id, name, instance_name, api_url, api_key, status)
-       VALUES ($1, $2, $3, $4, $5, $6, 'disconnected')
+      `INSERT INTO connections (user_id, organization_id, name, instance_name, api_url, api_key, status, webhook_url)
+       VALUES ($1, $2, $3, $4, $5, $6, 'disconnected', $7)
        RETURNING *`,
-      [req.userId, organization_id || null, name || 'WhatsApp', instanceName, EVOLUTION_API_URL, EVOLUTION_API_KEY]
+      [req.userId, organization_id || null, name || 'WhatsApp', instanceName, EVOLUTION_API_URL, EVOLUTION_API_KEY, webhookUrl]
     );
 
     const connection = dbResult.rows[0];
+
+    // Configure webhook separately (in case it wasn't included in creation)
+    let webhookConfigured = false;
+    if (webhookUrl) {
+      webhookConfigured = await configureInstanceWebhook(instanceName, webhookUrl);
+    }
+
+    // Configure instance settings
+    await configureInstanceSettings(instanceName);
 
     // Get QR code
     let qrCode = null;
@@ -212,6 +321,8 @@ router.post('/create', authenticate, async (req, res) => {
     res.status(201).json({
       ...connection,
       qrCode,
+      webhookConfigured,
+      webhookUrl,
     });
   } catch (error) {
     console.error('Create Evolution instance error:', error);
