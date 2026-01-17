@@ -367,12 +367,13 @@ router.delete('/organizations/:id', requireSuperadmin, async (req, res) => {
 // ORGANIZATION USERS MANAGEMENT
 // ============================================
 
-// Get organization members
+// Get organization members with limits info
 router.get('/organizations/:id/members', requireSuperadmin, async (req, res) => {
   try {
     const { id } = req.params;
     
-    const result = await query(
+    // Get members
+    const membersResult = await query(
       `SELECT om.id, om.role, om.created_at,
               u.id as user_id, u.email, u.name
        FROM organization_members om
@@ -387,8 +388,30 @@ router.get('/organizations/:id/members', requireSuperadmin, async (req, res) => 
          END`,
       [id]
     );
+
+    // Get plan limits
+    const limitsResult = await query(
+      `SELECT p.max_users, p.max_supervisors, p.name as plan_name
+       FROM organizations o
+       LEFT JOIN plans p ON p.id = o.plan_id
+       WHERE o.id = $1`,
+      [id]
+    );
+
+    const limits = limitsResult.rows[0] || { max_users: 999, max_supervisors: 999 };
+    const members = membersResult.rows;
+    const supervisorCount = members.filter(m => ['owner', 'admin'].includes(m.role)).length;
     
-    res.json(result.rows);
+    res.json({
+      members,
+      limits: {
+        max_users: limits.max_users || 999,
+        max_supervisors: limits.max_supervisors || 999,
+        current_users: members.length,
+        current_supervisors: supervisorCount,
+        plan_name: limits.plan_name || 'Sem plano'
+      }
+    });
   } catch (error) {
     console.error('Get org members error:', error);
     res.status(500).json({ error: 'Erro ao buscar membros' });
@@ -403,6 +426,53 @@ router.post('/organizations/:id/users', requireSuperadmin, async (req, res) => {
 
     if (!email || !name || !password) {
       return res.status(400).json({ error: 'Email, nome e senha são obrigatórios' });
+    }
+
+    // Get organization plan limits
+    const orgPlan = await query(
+      `SELECT o.id, p.max_users, p.max_supervisors, p.name as plan_name
+       FROM organizations o
+       LEFT JOIN plans p ON p.id = o.plan_id
+       WHERE o.id = $1`,
+      [id]
+    );
+
+    if (orgPlan.rows.length === 0) {
+      return res.status(404).json({ error: 'Organização não encontrada' });
+    }
+
+    const plan = orgPlan.rows[0];
+    const maxUsers = plan.max_users || 999;
+    const maxSupervisors = plan.max_supervisors || 999;
+
+    // Count current members
+    const memberCounts = await query(
+      `SELECT 
+         COUNT(*) as total_members,
+         COUNT(*) FILTER (WHERE role IN ('owner', 'admin')) as supervisor_count
+       FROM organization_members
+       WHERE organization_id = $1`,
+      [id]
+    );
+
+    const currentTotal = parseInt(memberCounts.rows[0].total_members) || 0;
+    const currentSupervisors = parseInt(memberCounts.rows[0].supervisor_count) || 0;
+
+    // Check total users limit
+    if (currentTotal >= maxUsers) {
+      return res.status(400).json({ 
+        error: `Limite de usuários atingido (${currentTotal}/${maxUsers}). Faça upgrade do plano.`,
+        code: 'USER_LIMIT_REACHED'
+      });
+    }
+
+    // Check supervisors limit (owner + admin roles)
+    const isSupervisorRole = ['owner', 'admin'].includes(role);
+    if (isSupervisorRole && currentSupervisors >= maxSupervisors) {
+      return res.status(400).json({ 
+        error: `Limite de supervisores atingido (${currentSupervisors}/${maxSupervisors}). Faça upgrade do plano.`,
+        code: 'SUPERVISOR_LIMIT_REACHED'
+      });
     }
 
     // Check if user exists
@@ -461,14 +531,52 @@ router.patch('/organizations/:orgId/members/:memberId', requireSuperadmin, async
       return res.status(400).json({ error: 'Role inválido' });
     }
 
+    // Get current member role
+    const currentMember = await query(
+      `SELECT role FROM organization_members WHERE id = $1 AND organization_id = $2`,
+      [memberId, orgId]
+    );
+
+    if (currentMember.rows.length === 0) {
+      return res.status(404).json({ error: 'Membro não encontrado' });
+    }
+
+    const currentRole = currentMember.rows[0].role;
+    const isPromotingToSupervisor = !['owner', 'admin'].includes(currentRole) && ['owner', 'admin'].includes(role);
+
+    // Check supervisor limit if promoting to supervisor role
+    if (isPromotingToSupervisor) {
+      const orgPlan = await query(
+        `SELECT p.max_supervisors
+         FROM organizations o
+         LEFT JOIN plans p ON p.id = o.plan_id
+         WHERE o.id = $1`,
+        [orgId]
+      );
+
+      const maxSupervisors = orgPlan.rows[0]?.max_supervisors || 999;
+
+      const supervisorCount = await query(
+        `SELECT COUNT(*) as count
+         FROM organization_members
+         WHERE organization_id = $1 AND role IN ('owner', 'admin')`,
+        [orgId]
+      );
+
+      const currentSupervisors = parseInt(supervisorCount.rows[0].count) || 0;
+
+      if (currentSupervisors >= maxSupervisors) {
+        return res.status(400).json({ 
+          error: `Limite de supervisores atingido (${currentSupervisors}/${maxSupervisors}). Faça upgrade do plano.`,
+          code: 'SUPERVISOR_LIMIT_REACHED'
+        });
+      }
+    }
+
     const result = await query(
       `UPDATE organization_members SET role = $1 WHERE id = $2 AND organization_id = $3 RETURNING *`,
       [role, memberId, orgId]
     );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Membro não encontrado' });
-    }
 
     res.json(result.rows[0]);
   } catch (error) {

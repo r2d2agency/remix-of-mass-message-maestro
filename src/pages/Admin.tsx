@@ -121,6 +121,13 @@ export default function Admin() {
   const [membersDialogOpen, setMembersDialogOpen] = useState(false);
   const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null);
   const [orgMembers, setOrgMembers] = useState<OrgMember[]>([]);
+  const [orgLimits, setOrgLimits] = useState<{
+    max_users: number;
+    max_supervisors: number;
+    current_users: number;
+    current_supervisors: number;
+    plan_name: string;
+  } | null>(null);
   const [loadingMembers, setLoadingMembers] = useState(false);
 
   // Add user to org dialog
@@ -362,9 +369,17 @@ export default function Admin() {
     setSelectedOrg(org);
     setMembersDialogOpen(true);
     setLoadingMembers(true);
-    const members = await getOrganizationMembers(org.id);
-    setOrgMembers(members);
+    const result = await getOrganizationMembers(org.id);
+    setOrgMembers(result.members);
+    setOrgLimits(result.limits);
     setLoadingMembers(false);
+  };
+
+  const reloadMembers = async () => {
+    if (!selectedOrg) return;
+    const result = await getOrganizationMembers(selectedOrg.id);
+    setOrgMembers(result.members);
+    setOrgLimits(result.limits);
   };
 
   const handleAddUser = async () => {
@@ -388,8 +403,7 @@ export default function Admin() {
       setNewUserPassword('');
       setNewUserRole('agent');
       // Reload members
-      const members = await getOrganizationMembers(selectedOrg.id);
-      setOrgMembers(members);
+      await reloadMembers();
       loadData();
     } else if (error) {
       toast.error(error);
@@ -402,8 +416,7 @@ export default function Admin() {
     const success = await updateMemberRole(selectedOrg.id, memberId, newRole);
     if (success) {
       toast.success('Permissão atualizada!');
-      const members = await getOrganizationMembers(selectedOrg.id);
-      setOrgMembers(members);
+      await reloadMembers();
     } else if (error) {
       toast.error(error);
     }
@@ -415,8 +428,7 @@ export default function Admin() {
     const success = await removeMember(selectedOrg.id, memberId);
     if (success) {
       toast.success('Membro removido!');
-      const members = await getOrganizationMembers(selectedOrg.id);
-      setOrgMembers(members);
+      await reloadMembers();
       loadData();
     } else if (error) {
       toast.error(error);
@@ -1337,10 +1349,37 @@ export default function Admin() {
           </DialogHeader>
           
           <div className="py-4">
+            {/* Limits info */}
+            {orgLimits && (
+              <div className="grid grid-cols-2 gap-3 mb-4 p-3 rounded-lg bg-muted/50 border">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground flex items-center gap-2">
+                    <Users className="h-4 w-4" />
+                    Usuários
+                  </span>
+                  <Badge variant={orgLimits.current_users >= orgLimits.max_users ? 'destructive' : 'secondary'}>
+                    {orgLimits.current_users}/{orgLimits.max_users}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground flex items-center gap-2">
+                    <Crown className="h-4 w-4" />
+                    Supervisores
+                  </span>
+                  <Badge variant={orgLimits.current_supervisors >= orgLimits.max_supervisors ? 'destructive' : 'secondary'}>
+                    {orgLimits.current_supervisors}/{orgLimits.max_supervisors}
+                  </Badge>
+                </div>
+              </div>
+            )}
+            
             <div className="flex justify-end mb-4">
               <Dialog open={addUserDialogOpen} onOpenChange={setAddUserDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button size="sm">
+                  <Button 
+                    size="sm"
+                    disabled={orgLimits && orgLimits.current_users >= orgLimits.max_users}
+                  >
                     <UserPlus className="h-4 w-4 mr-2" />
                     Adicionar Usuário
                   </Button>
