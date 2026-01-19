@@ -776,6 +776,14 @@ export function ChatArea({
                       loading="lazy"
                       className="rounded max-w-full max-h-[300px] mb-2 cursor-pointer hover:opacity-90"
                       crossOrigin="anonymous"
+                      onError={(e) => {
+                        const target = e.currentTarget;
+                        target.style.display = 'none';
+                        const fallback = document.createElement('div');
+                        fallback.className = 'flex items-center gap-2 text-sm opacity-70 mb-2 p-3 rounded bg-muted';
+                        fallback.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg><span>Imagem não disponível</span>';
+                        target.parentElement?.appendChild(fallback);
+                      }}
                     />
                   </a>
                 )}
@@ -838,6 +846,14 @@ export function ChatArea({
                     alt="Sticker recebido"
                     className="max-w-[150px] max-h-[150px] mb-2"
                     crossOrigin="anonymous"
+                    onError={(e) => {
+                      const target = e.currentTarget;
+                      target.style.display = 'none';
+                      const fallback = document.createElement('div');
+                      fallback.className = 'flex items-center gap-2 text-sm opacity-70 mb-2';
+                      fallback.innerHTML = '🎭 <span>Sticker não disponível</span>';
+                      target.parentElement?.appendChild(fallback);
+                    }}
                   />
                 )}
                 {msg.message_type === 'document' && mediaUrl && (
