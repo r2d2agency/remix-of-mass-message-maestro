@@ -1022,8 +1022,8 @@ export default function AsaasConfig({ organizationId, connections }: AsaasConfig
                       Nova Regra
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="max-w-lg">
-                    <DialogHeader>
+                  <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
+                    <DialogHeader className="flex-shrink-0">
                       <DialogTitle>
                         {editingRule ? "Editar Regra" : "Nova Regra de Notificação"}
                       </DialogTitle>
@@ -1031,7 +1031,7 @@ export default function AsaasConfig({ organizationId, connections }: AsaasConfig
                         Configure quando e como as notificações serão enviadas.
                       </DialogDescription>
                     </DialogHeader>
-                    <div className="space-y-4">
+                    <div className="space-y-4 overflow-y-auto flex-1 pr-2">
                       <div className="space-y-2">
                         <Label>Nome da Regra</Label>
                         <Input 
