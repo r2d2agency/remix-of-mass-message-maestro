@@ -250,7 +250,9 @@ export async function disconnect(instanceId, token) {
  * Send text message
  */
 export async function sendText(instanceId, token, phone, message) {
-  const cleanPhone = phone.replace(/\D/g, '');
+  // For groups (@g.us), keep the full JID; for individuals, clean the phone
+  const isGroup = phone.includes('@g.us');
+  const cleanPhone = isGroup ? phone : phone.replace(/\D/g, '');
   const at = new Date().toISOString();
 
   try {
@@ -318,6 +320,9 @@ export async function sendText(instanceId, token, phone, message) {
  * Send image message
  */
 export async function sendImage(instanceId, token, phone, imageUrl, caption = '') {
+  const isGroup = phone.includes('@g.us');
+  const cleanPhone = isGroup ? phone : phone.replace(/\D/g, '');
+  
   try {
     const response = await fetch(
       `${W_API_BASE_URL}/message/send-image?instanceId=${instanceId}`,
@@ -325,7 +330,7 @@ export async function sendImage(instanceId, token, phone, imageUrl, caption = ''
         method: 'POST',
         headers: getHeaders(token),
         body: JSON.stringify({
-          phone: phone.replace(/\D/g, ''),
+          phone: cleanPhone,
           image: imageUrl,
           caption: caption,
         }),
@@ -355,6 +360,9 @@ export async function sendImage(instanceId, token, phone, imageUrl, caption = ''
  * Send audio message
  */
 export async function sendAudio(instanceId, token, phone, audioUrl) {
+  const isGroup = phone.includes('@g.us');
+  const cleanPhone = isGroup ? phone : phone.replace(/\D/g, '');
+  
   try {
     const response = await fetch(
       `${W_API_BASE_URL}/message/send-audio?instanceId=${instanceId}`,
@@ -362,7 +370,7 @@ export async function sendAudio(instanceId, token, phone, audioUrl) {
         method: 'POST',
         headers: getHeaders(token),
         body: JSON.stringify({
-          phone: phone.replace(/\D/g, ''),
+          phone: cleanPhone,
           audio: audioUrl,
         }),
       }
@@ -391,6 +399,9 @@ export async function sendAudio(instanceId, token, phone, audioUrl) {
  * Send video message
  */
 export async function sendVideo(instanceId, token, phone, videoUrl, caption = '') {
+  const isGroup = phone.includes('@g.us');
+  const cleanPhone = isGroup ? phone : phone.replace(/\D/g, '');
+  
   try {
     const response = await fetch(
       `${W_API_BASE_URL}/message/send-video?instanceId=${instanceId}`,
@@ -398,7 +409,7 @@ export async function sendVideo(instanceId, token, phone, videoUrl, caption = ''
         method: 'POST',
         headers: getHeaders(token),
         body: JSON.stringify({
-          phone: phone.replace(/\D/g, ''),
+          phone: cleanPhone,
           video: videoUrl,
           caption: caption,
         }),
@@ -428,6 +439,9 @@ export async function sendVideo(instanceId, token, phone, videoUrl, caption = ''
  * Send document message
  */
 export async function sendDocument(instanceId, token, phone, documentUrl, filename = 'document') {
+  const isGroup = phone.includes('@g.us');
+  const cleanPhone = isGroup ? phone : phone.replace(/\D/g, '');
+  
   try {
     const response = await fetch(
       `${W_API_BASE_URL}/message/send-document?instanceId=${instanceId}`,
@@ -435,7 +449,7 @@ export async function sendDocument(instanceId, token, phone, documentUrl, filena
         method: 'POST',
         headers: getHeaders(token),
         body: JSON.stringify({
-          phone: phone.replace(/\D/g, ''),
+          phone: cleanPhone,
           document: documentUrl,
           filename: filename,
         }),
