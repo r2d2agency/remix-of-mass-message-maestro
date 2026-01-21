@@ -5,16 +5,21 @@ import * as whatsappProvider from '../lib/whatsapp-provider.js';
 
 const router = Router();
 
-// Get user's organization
+// Get user's organization with role
 async function getUserOrganization(userId) {
   const result = await query(
-    `SELECT om.organization_id 
+    `SELECT om.organization_id, om.role 
      FROM organization_members om 
      WHERE om.user_id = $1 
      LIMIT 1`,
     [userId]
   );
-  return result.rows[0]?.organization_id;
+  return result.rows[0] || null;
+}
+
+// Check if user role is view-only (manager = supervisor)
+function isViewOnlyRole(role) {
+  return role === 'manager';
 }
 
 // Get user's connections
@@ -303,6 +308,13 @@ router.patch('/conversations/:id', authenticate, async (req, res) => {
   try {
     const { id } = req.params;
     const { assigned_to, is_archived } = req.body;
+
+    // Check if user is manager (view-only) - cannot assign or modify conversations
+    const userOrg = await getUserOrganization(req.userId);
+    if (userOrg && isViewOnlyRole(userOrg.role)) {
+      return res.status(403).json({ error: 'Supervisores não podem assumir ou modificar conversas, apenas visualizar' });
+    }
+
     const connectionIds = await getUserConnections(req.userId);
 
     // Check if conversation belongs to user
@@ -678,6 +690,12 @@ router.get('/conversations/:id/messages', authenticate, async (req, res) => {
 // Send message (optimistic: save DB first, send to WhatsApp async)
 router.post('/conversations/:id/messages', authenticate, async (req, res) => {
   try {
+    // Check if user is manager (view-only) - cannot send messages
+    const userOrg = await getUserOrganization(req.userId);
+    if (userOrg && isViewOnlyRole(userOrg.role)) {
+      return res.status(403).json({ error: 'Supervisores não podem enviar mensagens, apenas visualizar' });
+    }
+
     const { id } = req.params;
     const { content, message_type = 'text', media_url, media_mimetype, quoted_message_id } = req.body;
     const connectionIds = await getUserConnections(req.userId);

@@ -48,6 +48,7 @@ const Chat = () => {
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [connections, setConnections] = useState<{ id: string; name: string; phone_number: string | null; status: string }[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [userRole, setUserRole] = useState<string>('');
   
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [sendingMessage, setSendingMessage] = useState(false);
@@ -87,6 +88,7 @@ const Chat = () => {
     try {
       const profile = await api<UserProfile>('/api/auth/me');
       const role = profile.user?.role || '';
+      setUserRole(role);
       setIsAdmin(['owner', 'admin'].includes(role));
     } catch (error) {
       console.error('Error checking user role:', error);
@@ -498,6 +500,7 @@ const Chat = () => {
           team={team}
           syncingHistory={syncingHistory}
           isAdmin={isAdmin}
+          userRole={userRole}
           onSyncHistory={handleSyncHistory}
           onSendMessage={handleSendMessage}
           onLoadMore={handleLoadMoreMessages}
