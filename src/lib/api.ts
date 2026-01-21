@@ -65,14 +65,30 @@ export const authApi = {
       { method: 'POST', body: { email, password }, auth: false }
     ),
 
-  register: (email: string, password: string, name: string) =>
+  register: (email: string, password: string, name: string, plan_id?: string) =>
     api<{ user: { id: string; email: string; name: string }; token: string }>(
       '/api/auth/register',
-      { method: 'POST', body: { email, password, name }, auth: false }
+      { method: 'POST', body: { email, password, name, plan_id }, auth: false }
     ),
 
   getMe: () =>
     api<{ user: { id: string; email: string; name: string } }>('/api/auth/me'),
+
+  getSignupPlans: () =>
+    api<Array<{
+      id: string;
+      name: string;
+      description: string | null;
+      max_connections: number;
+      max_monthly_messages: number;
+      max_users: number;
+      price: number;
+      billing_period: string;
+      trial_days: number;
+      has_chat: boolean;
+      has_campaigns: boolean;
+      has_asaas_integration: boolean;
+    }>>('/api/auth/plans', { auth: false }),
 };
 
 export const setAuthToken = (token: string) => {

@@ -13,7 +13,7 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, name: string) => Promise<void>;
+  register: (email: string, password: string, name: string, planId?: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -47,8 +47,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     toast({ title: 'Login realizado com sucesso!' });
   };
 
-  const register = async (email: string, password: string, name: string) => {
-    const { user, token } = await authApi.register(email, password, name);
+  const register = async (email: string, password: string, name: string, planId?: string) => {
+    const { user, token } = await authApi.register(email, password, name, planId);
     setAuthToken(token);
     setUser(user);
     toast({ title: 'Conta criada com sucesso!' });
