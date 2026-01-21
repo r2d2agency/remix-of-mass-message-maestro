@@ -24,6 +24,8 @@ interface Plan {
   price: number;
   billing_period: string;
   is_active: boolean;
+  visible_on_signup: boolean;
+  trial_days: number;
   org_count?: number;
   created_at: string;
 }
@@ -98,6 +100,8 @@ export function useSuperadmin() {
     has_campaigns: boolean;
     price: number;
     billing_period: string;
+    visible_on_signup?: boolean;
+    trial_days?: number;
   }): Promise<Plan | null> => {
     setLoading(true);
     setError(null);

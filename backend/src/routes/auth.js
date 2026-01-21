@@ -5,10 +5,28 @@ import { query } from '../db.js';
 
 const router = Router();
 
+// Get visible plans for signup (public endpoint)
+router.get('/plans', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT id, name, description, max_connections, max_monthly_messages, max_users, max_supervisors, 
+              has_asaas_integration, has_chat, has_whatsapp_groups, has_campaigns, 
+              price, billing_period, trial_days
+       FROM plans 
+       WHERE is_active = true AND visible_on_signup = true 
+       ORDER BY price ASC`
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Get plans error:', error);
+    res.status(500).json({ error: 'Erro ao buscar planos' });
+  }
+});
+
 // Register
 router.post('/register', async (req, res) => {
   try {
-    const { email, password, name } = req.body;
+    const { email, password, name, plan_id } = req.body;
 
     if (!email || !password || !name) {
       return res.status(400).json({ error: 'Todos os campos são obrigatórios' });
@@ -18,6 +36,19 @@ router.post('/register', async (req, res) => {
     const existing = await query('SELECT id FROM users WHERE email = $1', [email]);
     if (existing.rows.length > 0) {
       return res.status(400).json({ error: 'Email já cadastrado' });
+    }
+
+    // Validate plan if provided
+    let selectedPlan = null;
+    if (plan_id) {
+      const planResult = await query(
+        'SELECT id, name, trial_days FROM plans WHERE id = $1 AND is_active = true AND visible_on_signup = true',
+        [plan_id]
+      );
+      if (planResult.rows.length === 0) {
+        return res.status(400).json({ error: 'Plano inválido ou não disponível' });
+      }
+      selectedPlan = planResult.rows[0];
     }
 
     // Hash password
@@ -30,6 +61,35 @@ router.post('/register', async (req, res) => {
     );
 
     const user = result.rows[0];
+
+    // If plan selected, create organization with trial period
+    if (selectedPlan) {
+      const slug = name.toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        + '-' + Date.now().toString(36);
+
+      const trialDays = selectedPlan.trial_days || 3;
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + trialDays);
+
+      // Create organization
+      const orgResult = await query(
+        `INSERT INTO organizations (name, slug, plan_id, expires_at) 
+         VALUES ($1, $2, $3, $4) RETURNING id`,
+        [name, slug, selectedPlan.id, expiresAt.toISOString()]
+      );
+
+      const orgId = orgResult.rows[0].id;
+
+      // Add user as owner
+      await query(
+        `INSERT INTO organization_members (organization_id, user_id, role) VALUES ($1, $2, 'owner')`,
+        [orgId, user.id]
+      );
+    }
 
     // Generate token
     const token = jwt.sign(

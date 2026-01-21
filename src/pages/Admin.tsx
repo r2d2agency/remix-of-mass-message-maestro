@@ -48,6 +48,8 @@ interface Plan {
   price: number;
   billing_period: string;
   is_active: boolean;
+  visible_on_signup: boolean;
+  trial_days: number;
   org_count?: number;
   created_at: string;
 }
@@ -115,6 +117,8 @@ export default function Admin() {
   const [newPlanGroups, setNewPlanGroups] = useState(false);
   const [newPlanCampaigns, setNewPlanCampaigns] = useState(true);
   const [newPlanPeriod, setNewPlanPeriod] = useState('monthly');
+  const [newPlanVisibleOnSignup, setNewPlanVisibleOnSignup] = useState(false);
+  const [newPlanTrialDays, setNewPlanTrialDays] = useState('3');
 
   // Edit plan dialog
   const [editPlanDialogOpen, setEditPlanDialogOpen] = useState(false);
@@ -220,7 +224,9 @@ export default function Admin() {
       has_whatsapp_groups: newPlanGroups,
       has_campaigns: newPlanCampaigns,
       price: parseFloat(newPlanPrice) || 0,
-      billing_period: newPlanPeriod
+      billing_period: newPlanPeriod,
+      visible_on_signup: newPlanVisibleOnSignup,
+      trial_days: parseInt(newPlanTrialDays) || 3
     });
 
     if (plan) {
@@ -246,6 +252,8 @@ export default function Admin() {
     setNewPlanGroups(false);
     setNewPlanCampaigns(true);
     setNewPlanPeriod('monthly');
+    setNewPlanVisibleOnSignup(false);
+    setNewPlanTrialDays('3');
   };
 
   const handleUpdatePlan = async () => {
@@ -264,7 +272,9 @@ export default function Admin() {
       has_campaigns: editingPlan.has_campaigns,
       price: editingPlan.price,
       billing_period: editingPlan.billing_period,
-      is_active: editingPlan.is_active
+      is_active: editingPlan.is_active,
+      visible_on_signup: editingPlan.visible_on_signup,
+      trial_days: editingPlan.trial_days
     });
 
     if (updated) {
@@ -662,6 +672,34 @@ export default function Admin() {
                         />
                       </div>
                     </div>
+                    <div className="border-t pt-4 space-y-4">
+                      <div className="flex items-center justify-between rounded-lg border border-primary/30 bg-primary/5 p-3">
+                        <div className="flex items-center gap-2">
+                          <Eye className="h-4 w-4 text-primary" />
+                          <div>
+                            <Label htmlFor="visible-switch">Visível no Cadastro</Label>
+                            <p className="text-xs text-muted-foreground">Usuários podem escolher este plano ao se cadastrar</p>
+                          </div>
+                        </div>
+                        <Switch
+                          id="visible-switch"
+                          checked={newPlanVisibleOnSignup}
+                          onCheckedChange={setNewPlanVisibleOnSignup}
+                        />
+                      </div>
+                      {newPlanVisibleOnSignup && (
+                        <div className="space-y-2">
+                          <Label>Dias de Teste Grátis</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            max="30"
+                            value={newPlanTrialDays}
+                            onChange={(e) => setNewPlanTrialDays(e.target.value)}
+                          />
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <DialogFooter>
                     <Button variant="outline" onClick={() => setCreatePlanDialogOpen(false)}>
@@ -695,6 +733,7 @@ export default function Admin() {
                           <CardTitle className="flex items-center gap-2">
                             {plan.name}
                             {!plan.is_active && <Badge variant="outline">Inativo</Badge>}
+                            {plan.visible_on_signup && <Badge variant="default" className="text-xs">Cadastro ({plan.trial_days || 3}d)</Badge>}
                           </CardTitle>
                           <CardDescription className="mt-1">
                             {plan.description || 'Sem descrição'}
@@ -1330,6 +1369,29 @@ export default function Admin() {
                     onCheckedChange={(v) => setEditingPlan({ ...editingPlan, is_active: v })}
                   />
                 </div>
+                <div className="flex items-center justify-between rounded-lg border border-primary/30 bg-primary/5 p-3">
+                  <div>
+                    <Label htmlFor="edit-visible">Visível no Cadastro</Label>
+                    <p className="text-xs text-muted-foreground">Usuários podem escolher este plano</p>
+                  </div>
+                  <Switch
+                    id="edit-visible"
+                    checked={editingPlan.visible_on_signup}
+                    onCheckedChange={(v) => setEditingPlan({ ...editingPlan, visible_on_signup: v })}
+                  />
+                </div>
+                {editingPlan.visible_on_signup && (
+                  <div className="space-y-2">
+                    <Label>Dias de Teste Grátis</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      max="30"
+                      value={editingPlan.trial_days || 3}
+                      onChange={(e) => setEditingPlan({ ...editingPlan, trial_days: parseInt(e.target.value) || 3 })}
+                    />
+                  </div>
+                )}
               </div>
             </div>
           )}

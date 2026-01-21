@@ -99,7 +99,9 @@ router.post('/plans', requireSuperadmin, async (req, res) => {
       has_whatsapp_groups,
       has_campaigns,
       price, 
-      billing_period 
+      billing_period,
+      visible_on_signup,
+      trial_days
     } = req.body;
 
     if (!name) {
@@ -107,8 +109,8 @@ router.post('/plans', requireSuperadmin, async (req, res) => {
     }
 
     const result = await query(
-      `INSERT INTO plans (name, description, max_connections, max_monthly_messages, max_users, max_supervisors, has_asaas_integration, has_chat, has_whatsapp_groups, has_campaigns, price, billing_period)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
+      `INSERT INTO plans (name, description, max_connections, max_monthly_messages, max_users, max_supervisors, has_asaas_integration, has_chat, has_whatsapp_groups, has_campaigns, price, billing_period, visible_on_signup, trial_days)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *`,
       [
         name, 
         description, 
@@ -121,7 +123,9 @@ router.post('/plans', requireSuperadmin, async (req, res) => {
         has_whatsapp_groups || false,
         has_campaigns !== false,
         price || 0, 
-        billing_period || 'monthly'
+        billing_period || 'monthly',
+        visible_on_signup || false,
+        trial_days || 3
       ]
     );
 
@@ -149,7 +153,9 @@ router.patch('/plans/:id', requireSuperadmin, async (req, res) => {
       has_campaigns,
       price, 
       billing_period, 
-      is_active 
+      is_active,
+      visible_on_signup,
+      trial_days
     } = req.body;
 
     const result = await query(
@@ -167,10 +173,12 @@ router.patch('/plans/:id', requireSuperadmin, async (req, res) => {
            price = COALESCE($11, price),
            billing_period = COALESCE($12, billing_period),
            is_active = COALESCE($13, is_active),
+           visible_on_signup = COALESCE($14, visible_on_signup),
+           trial_days = COALESCE($15, trial_days),
            updated_at = NOW()
-       WHERE id = $14
+       WHERE id = $16
        RETURNING *`,
-      [name, description, max_connections, max_monthly_messages, max_users, max_supervisors, has_asaas_integration, has_chat, has_whatsapp_groups, has_campaigns, price, billing_period, is_active, id]
+      [name, description, max_connections, max_monthly_messages, max_users, max_supervisors, has_asaas_integration, has_chat, has_whatsapp_groups, has_campaigns, price, billing_period, is_active, visible_on_signup, trial_days, id]
     );
 
     if (result.rows.length === 0) {
