@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -17,17 +17,22 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { CalendarClock, Loader2, X, Trash2 } from "lucide-react";
+import { CalendarClock, Loader2, Trash2, Image, X, FileText } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { ScheduledMessage } from "@/hooks/use-chat";
+import { useUpload } from "@/hooks/use-upload";
+import { toast } from "sonner";
 
 interface ScheduleMessageDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSchedule: (data: {
-    content: string;
+    content?: string;
+    message_type?: string;
+    media_url?: string;
+    media_mimetype?: string;
     scheduled_at: string;
   }) => Promise<void>;
   scheduledMessages: ScheduledMessage[];
@@ -47,22 +52,87 @@ export function ScheduleMessageDialog({
   const [date, setDate] = useState<Date | undefined>(undefined);
   const [time, setTime] = useState("09:00");
   const [showCalendar, setShowCalendar] = useState(false);
+  const [mediaPreview, setMediaPreview] = useState<string | null>(null);
+  const [mediaUrl, setMediaUrl] = useState<string | null>(null);
+  const [mediaMimetype, setMediaMimetype] = useState<string | null>(null);
+  const [mediaType, setMediaType] = useState<"text" | "image" | "document">("text");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const { uploadFile, isUploading } = useUpload();
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Check if it's an image
+    const isImage = file.type.startsWith("image/");
+    const isDocument = !isImage;
+
+    try {
+      // Create preview for images
+      if (isImage) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          setMediaPreview(event.target?.result as string);
+        };
+        reader.readAsDataURL(file);
+      } else {
+        setMediaPreview(null);
+      }
+
+      // Upload file
+      const url = await uploadFile(file);
+      if (url) {
+        setMediaUrl(url);
+        setMediaMimetype(file.type);
+        setMediaType(isImage ? "image" : "document");
+        toast.success("Arquivo carregado com sucesso!");
+      }
+    } catch (error) {
+      console.error("Upload error:", error);
+      toast.error("Erro ao carregar arquivo");
+      clearMedia();
+    }
+
+    // Reset input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const clearMedia = () => {
+    setMediaPreview(null);
+    setMediaUrl(null);
+    setMediaMimetype(null);
+    setMediaType("text");
+  };
 
   const handleSchedule = async () => {
-    if (!content.trim() || !date) return;
+    if (!date) return;
+    
+    // Must have either content or media
+    if (!content.trim() && !mediaUrl) {
+      toast.error("Adicione uma mensagem ou imagem");
+      return;
+    }
 
     const [hours, minutes] = time.split(":").map(Number);
     const scheduledDate = new Date(date);
     scheduledDate.setHours(hours, minutes, 0, 0);
 
     await onSchedule({
-      content: content.trim(),
+      content: content.trim() || undefined,
+      message_type: mediaUrl ? mediaType : "text",
+      media_url: mediaUrl || undefined,
+      media_mimetype: mediaMimetype || undefined,
       scheduled_at: scheduledDate.toISOString(),
     });
 
+    // Reset form
     setContent("");
     setDate(undefined);
     setTime("09:00");
+    clearMedia();
   };
 
   const formatScheduledDate = (dateStr: string) => {
@@ -70,9 +140,15 @@ export function ScheduleMessageDialog({
     return format(d, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
   };
 
+  const getMessageIcon = (msg: ScheduledMessage) => {
+    if (msg.message_type === "image") return <Image className="h-3 w-3" />;
+    if (msg.message_type === "document") return <FileText className="h-3 w-3" />;
+    return null;
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <CalendarClock className="h-5 w-5" />
@@ -84,11 +160,72 @@ export function ScheduleMessageDialog({
         </DialogHeader>
 
         <div className="space-y-4">
+          {/* Image/Document Upload */}
+          <div className="space-y-2">
+            <Label>Anexo (opcional)</Label>
+            <div className="flex gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploading}
+                className="flex-1"
+              >
+                {isUploading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Carregando...
+                  </>
+                ) : (
+                  <>
+                    <Image className="h-4 w-4 mr-2" />
+                    Adicionar imagem ou documento
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {/* Media Preview */}
+            {mediaUrl && (
+              <div className="relative inline-block">
+                {mediaType === "image" && mediaPreview ? (
+                  <img
+                    src={mediaPreview}
+                    alt="Preview"
+                    className="max-h-32 rounded-lg border"
+                  />
+                ) : (
+                  <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
+                    <FileText className="h-5 w-5" />
+                    <span className="text-sm">Documento anexado</span>
+                  </div>
+                )}
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="icon"
+                  className="absolute -top-2 -right-2 h-6 w-6"
+                  onClick={clearMedia}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+            )}
+          </div>
+
           {/* Message content */}
           <div className="space-y-2">
-            <Label>Mensagem</Label>
+            <Label>Mensagem {mediaUrl ? "(legenda)" : ""}</Label>
             <Textarea
-              placeholder="Digite a mensagem..."
+              placeholder={mediaUrl ? "Digite uma legenda (opcional)..." : "Digite a mensagem..."}
               value={content}
               onChange={(e) => setContent(e.target.value)}
               rows={3}
@@ -148,10 +285,16 @@ export function ScheduleMessageDialog({
                     className="flex items-start gap-2 p-2 rounded-lg bg-muted text-sm"
                   >
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-muted-foreground flex items-center gap-1">
+                        {getMessageIcon(msg)}
                         {formatScheduledDate(msg.scheduled_at)}
                       </p>
-                      <p className="line-clamp-2">{msg.content}</p>
+                      {msg.media_url && (
+                        <p className="text-xs text-primary">
+                          {msg.message_type === "image" ? "📷 Imagem" : "📄 Documento"}
+                        </p>
+                      )}
+                      {msg.content && <p className="line-clamp-2">{msg.content}</p>}
                     </div>
                     <Button
                       variant="ghost"
@@ -175,7 +318,7 @@ export function ScheduleMessageDialog({
           </Button>
           <Button
             onClick={handleSchedule}
-            disabled={!content.trim() || !date || sending}
+            disabled={(!content.trim() && !mediaUrl) || !date || sending || isUploading}
           >
             {sending ? (
               <>
