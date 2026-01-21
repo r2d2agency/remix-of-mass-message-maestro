@@ -103,6 +103,7 @@ interface ChatAreaProps {
   tags: ConversationTag[];
   team: TeamMember[];
   isAdmin?: boolean;
+  userRole?: string; // Role do usuário: 'owner', 'admin', 'manager', 'agent'
   onSyncHistory?: (days: number) => Promise<void>;
   onSendMessage: (content: string, type?: string, mediaUrl?: string, quotedMessageId?: string, mediaMimetype?: string) => Promise<void>;
   onLoadMore: () => void;
@@ -140,6 +141,7 @@ export function ChatArea({
   tags,
   team,
   isAdmin = false,
+  userRole,
   onSyncHistory,
   onSendMessage,
   onLoadMore,
@@ -152,6 +154,8 @@ export function ChatArea({
   onCreateTag,
   onDeleteConversation,
 }: ChatAreaProps) {
+  // Manager (Supervisor) = apenas visualização
+  const isViewOnly = userRole === 'manager';
   const [messageText, setMessageText] = useState("");
   const [showTransferDialog, setShowTransferDialog] = useState(false);
   const [transferTo, setTransferTo] = useState<string>("");
@@ -617,32 +621,34 @@ export function ChatArea({
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {/* Assign */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8">
-                <UserPlus className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => onAssign(null)}>
-                <X className="h-4 w-4 mr-2" />
-                Remover atendente
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              {team.map(member => (
-                <DropdownMenuItem
-                  key={member.id}
-                  onClick={() => onAssign(member.id)}
-                >
-                  {member.name}
-                  {conversation.assigned_to === member.id && (
-                    <Check className="h-4 w-4 ml-auto" />
-                  )}
+          {/* Assign - Hidden for view-only users (managers/supervisors) */}
+          {!isViewOnly && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <UserPlus className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => onAssign(null)}>
+                  <X className="h-4 w-4 mr-2" />
+                  Remover atendente
                 </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+                <DropdownMenuSeparator />
+                {team.map(member => (
+                  <DropdownMenuItem
+                    key={member.id}
+                    onClick={() => onAssign(member.id)}
+                  >
+                    {member.name}
+                    {conversation.assigned_to === member.id && (
+                      <Check className="h-4 w-4 ml-auto" />
+                    )}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
 
           {/* More options */}
           <DropdownMenu>
@@ -661,15 +667,19 @@ export function ChatArea({
                   </Badge>
                 )}
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setShowTransferDialog(true)}>
-                <ArrowLeftRight className="h-4 w-4 mr-2" />
-                Transferir atendimento
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={onArchive}>
-                <Archive className="h-4 w-4 mr-2" />
-                {conversation.is_archived ? 'Desarquivar' : 'Arquivar'}
-              </DropdownMenuItem>
+              {!isViewOnly && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => setShowTransferDialog(true)}>
+                    <ArrowLeftRight className="h-4 w-4 mr-2" />
+                    Transferir atendimento
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={onArchive}>
+                    <Archive className="h-4 w-4 mr-2" />
+                    {conversation.is_archived ? 'Desarquivar' : 'Arquivar'}
+                  </DropdownMenuItem>
+                </>
+              )}
               {isAdmin && (
                 <>
                   <DropdownMenuSeparator />
@@ -980,7 +990,15 @@ export function ChatArea({
         </div>
       </ScrollArea>
 
-      {/* Input */}
+      {/* Input - Show readonly message for supervisors */}
+      {isViewOnly ? (
+        <div className="p-4 border-t bg-muted/50">
+          <div className="flex items-center justify-center gap-2 text-muted-foreground py-3">
+            <Users className="h-5 w-5" />
+            <span className="text-sm font-medium">Modo Supervisor - Apenas visualização</span>
+          </div>
+        </div>
+      ) : (
       <div className="p-4 border-t bg-card">
         {/* Reply preview */}
         {replyingTo && (
@@ -1224,6 +1242,7 @@ export function ChatArea({
           )}
         </div>
       </div>
+      )}
 
       {/* Schedule Message Dialog */}
       <ScheduleMessageDialog
