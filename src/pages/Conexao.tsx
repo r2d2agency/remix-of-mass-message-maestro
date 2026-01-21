@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Plus, QrCode, RefreshCw, Plug, Unplug, Trash2, Phone, Loader2, Wifi, WifiOff, Send, Settings2, AlertTriangle, CheckCircle, Eye, Activity, Radio, Users, Download } from "lucide-react";
+import { Plus, QrCode, RefreshCw, Plug, Unplug, Trash2, Phone, Loader2, Wifi, WifiOff, Send, Settings2, AlertTriangle, CheckCircle, Eye, Activity, Radio, Users, Download, Pencil } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
@@ -78,6 +78,14 @@ const Conexao = () => {
   
   // Diagnostic panel state (full panel view)
   const [diagnosticPanelOpen, setDiagnosticPanelOpen] = useState(false);
+  
+  // Edit connection state (W-API)
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingConnection, setEditingConnection] = useState<Connection | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editInstanceId, setEditInstanceId] = useState("");
+  const [editWapiToken, setEditWapiToken] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
   const [diagnosticConnection, setDiagnosticConnection] = useState<Connection | null>(null);
 
   useEffect(() => {
@@ -357,6 +365,61 @@ const handleGetQRCode = async (connection: Connection) => {
       toast.error(error?.message || 'Erro ao sincronizar contatos');
     } finally {
       setSyncingContacts(null);
+    }
+  };
+
+  const handleOpenEditDialog = (connection: Connection) => {
+    setEditingConnection(connection);
+    setEditName(connection.name);
+    setEditInstanceId(connection.instance_id || '');
+    setEditWapiToken(''); // Don't show existing token for security
+    setEditDialogOpen(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingConnection) return;
+    
+    if (!editName.trim()) {
+      toast.error('Digite um nome para a conexão');
+      return;
+    }
+
+    const isWapi = editingConnection.provider === 'wapi' || !!editingConnection.instance_id;
+    
+    if (isWapi && !editInstanceId.trim()) {
+      toast.error('Instance ID é obrigatório');
+      return;
+    }
+
+    setSavingEdit(true);
+    try {
+      const body: Record<string, string> = { name: editName };
+      
+      if (isWapi) {
+        body.instance_id = editInstanceId;
+        if (editWapiToken.trim()) {
+          body.wapi_token = editWapiToken;
+        }
+      }
+
+      await api(`/api/connections/${editingConnection.id}`, {
+        method: 'PATCH',
+        body,
+      });
+
+      setConnections(prev => prev.map(c => 
+        c.id === editingConnection.id 
+          ? { ...c, name: editName, instance_id: editInstanceId } 
+          : c
+      ));
+
+      toast.success('Conexão atualizada!');
+      setEditDialogOpen(false);
+      setEditingConnection(null);
+    } catch (error: any) {
+      toast.error(error.message || 'Erro ao atualizar conexão');
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -797,6 +860,18 @@ const handleGetQRCode = async (connection: Connection) => {
                       </Popover>
                     )}
                     
+                    {/* Edit button - W-API connections */}
+                    {(connection.provider === 'wapi' || !!connection.instance_id) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleOpenEditDialog(connection)}
+                        title="Editar conexão"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    )}
+                    
                     {/* Delete button - always visible */}
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
@@ -1020,6 +1095,74 @@ const handleGetQRCode = async (connection: Connection) => {
                 onClose={() => setDiagnosticPanelOpen(false)}
               />
             )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Connection Dialog (W-API) */}
+        <Dialog 
+          open={editDialogOpen} 
+          onOpenChange={(open) => {
+            setEditDialogOpen(open);
+            if (!open) {
+              setEditingConnection(null);
+              setEditName('');
+              setEditInstanceId('');
+              setEditWapiToken('');
+            }
+          }}
+        >
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Editar Conexão W-API</DialogTitle>
+              <DialogDescription>
+                Atualize os dados da sua conexão. Deixe o token em branco para manter o atual.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Nome da Conexão</Label>
+                <Input 
+                  placeholder="Ex: WhatsApp Principal"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Instance ID</Label>
+                <Input 
+                  placeholder="Seu Instance ID da W-API"
+                  value={editInstanceId}
+                  onChange={(e) => setEditInstanceId(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Token (deixe em branco para manter o atual)</Label>
+                <Input 
+                  type="password"
+                  placeholder="Novo token (opcional)"
+                  value={editWapiToken}
+                  onChange={(e) => setEditWapiToken(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Por segurança, o token atual não é exibido. Preencha apenas se quiser alterá-lo.
+                </p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={handleSaveEdit} disabled={savingEdit}>
+                {savingEdit ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Salvando...
+                  </>
+                ) : (
+                  'Salvar'
+                )}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
