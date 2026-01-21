@@ -71,14 +71,13 @@ export default function Organizacoes() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editOrgName, setEditOrgName] = useState('');
   
-  // Add member dialog
-  const [addMemberDialogOpen, setAddMemberDialogOpen] = useState(false);
+  // Create user dialog
+  const [createUserDialogOpen, setCreateUserDialogOpen] = useState(false);
   const [newMemberEmail, setNewMemberEmail] = useState('');
   const [newMemberName, setNewMemberName] = useState('');
   const [newMemberPassword, setNewMemberPassword] = useState('');
   const [newMemberRole, setNewMemberRole] = useState<string>('agent');
   const [newMemberConnectionIds, setNewMemberConnectionIds] = useState<string[]>([]);
-  const [showCreateUserFields, setShowCreateUserFields] = useState(false);
 
   // Edit member dialog
   const [editMemberDialogOpen, setEditMemberDialogOpen] = useState(false);
@@ -169,53 +168,42 @@ export default function Organizacoes() {
     }
   };
 
-  const handleAddMember = async () => {
-    if (!selectedOrg || !newMemberEmail) {
-      toast.error('Informe o email do usuário');
+  const handleCreateUser = async () => {
+    if (!selectedOrg) return;
+    
+    if (!newMemberName || !newMemberEmail || !newMemberPassword) {
+      toast.error('Preencha nome, email e senha');
       return;
     }
-
-    // If showing create user fields, validate them
-    if (showCreateUserFields) {
-      if (!newMemberName || !newMemberPassword) {
-        toast.error('Preencha nome e senha para criar o usuário');
-        return;
-      }
-      if (newMemberPassword.length < 6) {
-        toast.error('Senha deve ter pelo menos 6 caracteres');
-        return;
-      }
+    if (newMemberPassword.length < 6) {
+      toast.error('Senha deve ter pelo menos 6 caracteres');
+      return;
     }
 
     const result = await addMember(selectedOrg.id, {
       email: newMemberEmail,
       role: newMemberRole,
-      name: showCreateUserFields ? newMemberName : undefined,
-      password: showCreateUserFields ? newMemberPassword : undefined,
+      name: newMemberName,
+      password: newMemberPassword,
       connection_ids: newMemberConnectionIds.length > 0 ? newMemberConnectionIds : undefined
     });
 
     if (result.success) {
-      toast.success(result.message || 'Membro adicionado!');
-      resetAddMemberDialog();
+      toast.success(result.message || 'Usuário criado com sucesso!');
+      resetCreateUserDialog();
       loadMembers(selectedOrg.id);
-    } else if (result.requires_registration) {
-      // Show create user fields
-      setShowCreateUserFields(true);
-      toast.info('Usuário não encontrado. Preencha os dados para criar.');
     } else if (error) {
       toast.error(error);
     }
   };
 
-  const resetAddMemberDialog = () => {
-    setAddMemberDialogOpen(false);
+  const resetCreateUserDialog = () => {
+    setCreateUserDialogOpen(false);
     setNewMemberEmail('');
     setNewMemberName('');
     setNewMemberPassword('');
     setNewMemberRole('agent');
     setNewMemberConnectionIds([]);
-    setShowCreateUserFields(false);
   };
 
   const handleOpenEditMember = (member: OrganizationMember) => {
@@ -455,58 +443,52 @@ export default function Organizacoes() {
                         </CardDescription>
                       </div>
                       {canManageOrg && (
-                        <Dialog open={addMemberDialogOpen} onOpenChange={(open) => {
-                          if (!open) resetAddMemberDialog();
-                          else setAddMemberDialogOpen(true);
+                        <Dialog open={createUserDialogOpen} onOpenChange={(open) => {
+                          if (!open) resetCreateUserDialog();
+                          else setCreateUserDialogOpen(true);
                         }}>
                           <DialogTrigger asChild>
                             <Button size="sm">
                               <UserPlus className="h-4 w-4 mr-2" />
-                              Adicionar Membro
+                              Criar Usuário
                             </Button>
                           </DialogTrigger>
                           <DialogContent className="max-w-md">
                             <DialogHeader>
-                              <DialogTitle>Adicionar Membro</DialogTitle>
+                              <DialogTitle>Criar Novo Usuário</DialogTitle>
                               <DialogDescription>
-                                {showCreateUserFields 
-                                  ? 'Complete os dados para criar um novo usuário'
-                                  : 'Adicione um usuário existente ou crie um novo'}
+                                Crie um novo usuário que será automaticamente membro desta organização
                               </DialogDescription>
                             </DialogHeader>
                             <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
                               <div className="space-y-2">
-                                <Label>Email do usuário *</Label>
+                                <Label>Nome *</Label>
+                                <Input
+                                  placeholder="Nome do usuário"
+                                  value={newMemberName}
+                                  onChange={(e) => setNewMemberName(e.target.value)}
+                                />
+                              </div>
+                              
+                              <div className="space-y-2">
+                                <Label>Email *</Label>
                                 <Input
                                   type="email"
                                   placeholder="usuario@email.com"
                                   value={newMemberEmail}
                                   onChange={(e) => setNewMemberEmail(e.target.value)}
-                                  disabled={showCreateUserFields}
                                 />
                               </div>
                               
-                              {showCreateUserFields && (
-                                <>
-                                  <div className="space-y-2">
-                                    <Label>Nome *</Label>
-                                    <Input
-                                      placeholder="Nome do usuário"
-                                      value={newMemberName}
-                                      onChange={(e) => setNewMemberName(e.target.value)}
-                                    />
-                                  </div>
-                                  <div className="space-y-2">
-                                    <Label>Senha *</Label>
-                                    <Input
-                                      type="password"
-                                      placeholder="Mínimo 6 caracteres"
-                                      value={newMemberPassword}
-                                      onChange={(e) => setNewMemberPassword(e.target.value)}
-                                    />
-                                  </div>
-                                </>
-                              )}
+                              <div className="space-y-2">
+                                <Label>Senha *</Label>
+                                <Input
+                                  type="password"
+                                  placeholder="Mínimo 6 caracteres"
+                                  value={newMemberPassword}
+                                  onChange={(e) => setNewMemberPassword(e.target.value)}
+                                />
+                              </div>
                               
                               <div className="space-y-2">
                                 <Label>Função</Label>
@@ -535,12 +517,12 @@ export default function Organizacoes() {
                                     {connections.map((conn) => (
                                       <div key={conn.id} className="flex items-center space-x-2">
                                         <Checkbox
-                                          id={`conn-${conn.id}`}
+                                          id={`conn-new-${conn.id}`}
                                           checked={newMemberConnectionIds.includes(conn.id)}
                                           onCheckedChange={() => toggleConnection(conn.id, newMemberConnectionIds, setNewMemberConnectionIds)}
                                         />
                                         <label
-                                          htmlFor={`conn-${conn.id}`}
+                                          htmlFor={`conn-new-${conn.id}`}
                                           className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1"
                                         >
                                           {conn.name}
@@ -555,25 +537,14 @@ export default function Organizacoes() {
                                   </div>
                                 </div>
                               )}
-
-                              {!showCreateUserFields && (
-                                <Button 
-                                  variant="outline" 
-                                  className="w-full"
-                                  onClick={() => setShowCreateUserFields(true)}
-                                >
-                                  <UserPlus className="h-4 w-4 mr-2" />
-                                  Criar novo usuário
-                                </Button>
-                              )}
                             </div>
                             <DialogFooter>
-                              <Button variant="outline" onClick={resetAddMemberDialog}>
+                              <Button variant="outline" onClick={resetCreateUserDialog}>
                                 Cancelar
                               </Button>
-                              <Button onClick={handleAddMember} disabled={loading}>
+                              <Button onClick={handleCreateUser} disabled={loading}>
                                 {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                                {showCreateUserFields ? 'Criar e Adicionar' : 'Adicionar'}
+                                Criar Usuário
                               </Button>
                             </DialogFooter>
                           </DialogContent>
