@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -336,6 +337,9 @@ export function ChatbotPermissionsDialog({ open, chatbot, onClose }: ChatbotPerm
             <Shield className="h-5 w-5 text-primary" />
             Permissões - {chatbot.name}
           </DialogTitle>
+          <DialogDescription>
+            Configure conexões, equipe, gatilhos e permissões de acesso
+          </DialogDescription>
         </DialogHeader>
 
         {loading ? (
@@ -439,7 +443,7 @@ export function ChatbotPermissionsDialog({ open, chatbot, onClose }: ChatbotPerm
                       </SelectTrigger>
                       <SelectContent>
                         {orgUsers
-                          .filter(u => !chatbotAgents.some(a => a.user_id === u.id))
+                          .filter(u => u.id && !chatbotAgents.some(a => a.user_id === u.id))
                           .map((user) => (
                             <SelectItem key={user.id} value={user.id}>
                               {user.name} ({user.email})
@@ -608,7 +612,7 @@ export function ChatbotPermissionsDialog({ open, chatbot, onClose }: ChatbotPerm
                       </SelectTrigger>
                       <SelectContent>
                         {orgUsers
-                          .filter(u => !permissions.some(p => p.user_id === u.id))
+                          .filter(u => u.id && !permissions.some(p => p.user_id === u.id))
                           .map((user) => (
                             <SelectItem key={user.id} value={user.id}>
                               {user.name} ({user.email})
