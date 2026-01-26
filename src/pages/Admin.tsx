@@ -19,7 +19,7 @@ import { useAdminSettings } from '@/hooks/use-branding';
 import { useUpload } from '@/hooks/use-upload';
 import { BrandingTab } from '@/components/admin/BrandingTab';
 import { toast } from 'sonner';
-import { Shield, Building2, Users, Plus, Trash2, Loader2, Pencil, Crown, Image, Package, CalendarIcon, UserPlus, Eye, MessageSquare, Receipt, Wifi, Upload, Palette, Bot, Clock } from 'lucide-react';
+import { Shield, Building2, Users, Plus, Trash2, Loader2, Pencil, Crown, Image, Package, CalendarIcon, UserPlus, Eye, MessageSquare, Receipt, Wifi, Upload, Palette, Bot, Clock, Briefcase } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -47,6 +47,7 @@ interface Plan {
   has_campaigns: boolean;
   has_chatbots: boolean;
   has_scheduled_messages: boolean;
+  has_crm: boolean;
   price: number;
   billing_period: string;
   is_active: boolean;
@@ -120,6 +121,7 @@ export default function Admin() {
   const [newPlanCampaigns, setNewPlanCampaigns] = useState(true);
   const [newPlanChatbots, setNewPlanChatbots] = useState(true);
   const [newPlanScheduled, setNewPlanScheduled] = useState(true);
+  const [newPlanCRM, setNewPlanCRM] = useState(true);
   const [newPlanPeriod, setNewPlanPeriod] = useState('monthly');
   const [newPlanVisibleOnSignup, setNewPlanVisibleOnSignup] = useState(false);
   const [newPlanTrialDays, setNewPlanTrialDays] = useState('3');
@@ -229,6 +231,7 @@ export default function Admin() {
       has_campaigns: newPlanCampaigns,
       has_chatbots: newPlanChatbots,
       has_scheduled_messages: newPlanScheduled,
+      has_crm: newPlanCRM,
       price: parseFloat(newPlanPrice) || 0,
       billing_period: newPlanPeriod,
       visible_on_signup: newPlanVisibleOnSignup,
@@ -259,6 +262,7 @@ export default function Admin() {
     setNewPlanCampaigns(true);
     setNewPlanChatbots(true);
     setNewPlanScheduled(true);
+    setNewPlanCRM(true);
     setNewPlanPeriod('monthly');
     setNewPlanVisibleOnSignup(false);
     setNewPlanTrialDays('3');
@@ -280,6 +284,7 @@ export default function Admin() {
       has_campaigns: editingPlan.has_campaigns,
       has_chatbots: editingPlan.has_chatbots,
       has_scheduled_messages: editingPlan.has_scheduled_messages,
+      has_crm: editingPlan.has_crm,
       price: editingPlan.price,
       billing_period: editingPlan.billing_period,
       is_active: editingPlan.is_active,
@@ -703,6 +708,17 @@ export default function Admin() {
                           onCheckedChange={setNewPlanScheduled}
                         />
                       </div>
+                      <div className="flex items-center justify-between rounded-lg border p-3">
+                        <div className="flex items-center gap-2">
+                          <Briefcase className="h-4 w-4 text-muted-foreground" />
+                          <Label htmlFor="crm-switch">CRM</Label>
+                        </div>
+                        <Switch
+                          id="crm-switch"
+                          checked={newPlanCRM}
+                          onCheckedChange={setNewPlanCRM}
+                        />
+                      </div>
                     </div>
                     <div className="border-t pt-4 space-y-4">
                       <div className="flex items-center justify-between rounded-lg border border-primary/30 bg-primary/5 p-3">
@@ -818,6 +834,9 @@ export default function Admin() {
                         )}
                         {plan.has_scheduled_messages && (
                           <Badge variant="secondary" className="text-xs">Agendamentos</Badge>
+                        )}
+                        {plan.has_crm && (
+                          <Badge variant="secondary" className="text-xs">CRM</Badge>
                         )}
                       </div>
                       <div className="flex items-center justify-between pt-2 border-t">
@@ -1413,6 +1432,14 @@ export default function Admin() {
                     id="edit-scheduled"
                     checked={editingPlan.has_scheduled_messages}
                     onCheckedChange={(v) => setEditingPlan({ ...editingPlan, has_scheduled_messages: v })}
+                  />
+                </div>
+                <div className="flex items-center justify-between rounded-lg border p-3">
+                  <Label htmlFor="edit-crm">CRM</Label>
+                  <Switch
+                    id="edit-crm"
+                    checked={editingPlan.has_crm}
+                    onCheckedChange={(v) => setEditingPlan({ ...editingPlan, has_crm: v })}
                   />
                 </div>
                 <div className="flex items-center justify-between rounded-lg border p-3">

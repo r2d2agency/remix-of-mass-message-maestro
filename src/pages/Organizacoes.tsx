@@ -120,6 +120,7 @@ export default function Organizacoes() {
     scheduled_messages: true,
     chatbots: true,
     chat: true,
+    crm: true,
   });
   const [savingModules, setSavingModules] = useState(false);
 
@@ -191,6 +192,7 @@ export default function Organizacoes() {
         scheduled_messages: modules.scheduled_messages ?? true,
         chatbots: modules.chatbots ?? true,
         chat: modules.chat ?? true,
+        crm: modules.crm ?? true,
       });
     } catch (error) {
       console.error('Error loading modules:', error);
@@ -953,6 +955,26 @@ export default function Organizacoes() {
                           <Switch
                             checked={modulesEnabled.chatbots}
                             onCheckedChange={(checked) => setModulesEnabled(prev => ({ ...prev, chatbots: checked }))}
+                            disabled={!canManageOrg}
+                          />
+                        </div>
+
+                        {/* CRM */}
+                        <div className="flex items-center justify-between rounded-lg border p-4">
+                          <div className="flex items-center gap-4">
+                            <div className="h-10 w-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                              <Briefcase className="h-5 w-5 text-amber-500" />
+                            </div>
+                            <div>
+                              <p className="font-medium">CRM</p>
+                              <p className="text-sm text-muted-foreground">
+                                Gestão de negociações, empresas e tarefas comerciais
+                              </p>
+                            </div>
+                          </div>
+                          <Switch
+                            checked={modulesEnabled.crm}
+                            onCheckedChange={(checked) => setModulesEnabled(prev => ({ ...prev, crm: checked }))}
                             disabled={!canManageOrg}
                           />
                         </div>
