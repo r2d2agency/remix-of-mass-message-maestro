@@ -602,7 +602,7 @@ router.get('/funnels/:funnelId/deals', async (req, res) => {
        LEFT JOIN users u ON u.id = d.owner_id
        LEFT JOIN crm_stages s ON s.id = d.stage_id
        LEFT JOIN crm_user_groups g ON g.id = d.group_id
-       WHERE d.funnel_id = $1 AND d.organization_id = $2 AND d.status = 'open'${visibilityFilter}
+       WHERE d.funnel_id = $1 AND d.organization_id = $2${visibilityFilter}
        ORDER BY d.created_at DESC`,
       params
     );
@@ -725,9 +725,12 @@ router.post('/deals', async (req, res) => {
       // Normalize phone
       const normalizedPhone = contact_phone.replace(/\D/g, '');
       
-      // Try to find existing contact
+      // Try to find existing contact via contact_lists
       let contactResult = await query(
-        `SELECT id FROM contacts WHERE phone LIKE $1 AND organization_id = $2 LIMIT 1`,
+        `SELECT c.id FROM contacts c 
+         JOIN contact_lists cl ON cl.id = c.list_id 
+         WHERE c.phone LIKE $1 AND cl.organization_id = $2 
+         LIMIT 1`,
         [`%${normalizedPhone.slice(-9)}%`, org.organization_id]
       );
       
@@ -735,11 +738,24 @@ router.post('/deals', async (req, res) => {
       if (contactResult.rows.length > 0) {
         contactId = contactResult.rows[0].id;
       } else {
-        // Create new contact
+        // Ensure CRM contacts list exists
+        let crmList = await query(
+          `SELECT id FROM contact_lists WHERE organization_id = $1 AND name = 'CRM Contacts' LIMIT 1`,
+          [org.organization_id]
+        );
+        
+        if (crmList.rows.length === 0) {
+          crmList = await query(
+            `INSERT INTO contact_lists (organization_id, user_id, name) VALUES ($1, $2, 'CRM Contacts') RETURNING id`,
+            [org.organization_id, req.userId]
+          );
+        }
+        
+        // Create new contact in CRM list
         const newContact = await query(
-          `INSERT INTO contacts (organization_id, name, phone, created_at) 
-           VALUES ($1, $2, $3, NOW()) RETURNING id`,
-          [org.organization_id, contact_name || contact_phone, normalizedPhone]
+          `INSERT INTO contacts (list_id, name, phone) 
+           VALUES ($1, $2, $3) RETURNING id`,
+          [crmList.rows[0].id, contact_name || contact_phone, normalizedPhone]
         );
         contactId = newContact.rows[0].id;
       }
