@@ -8,6 +8,7 @@ interface ModulesEnabled {
   groups: boolean;
   scheduled_messages: boolean;
   chatbots: boolean;
+  chat: boolean;
 }
 
 interface User {
@@ -42,6 +43,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     groups: true,
     scheduled_messages: true,
     chatbots: true,
+    chat: true,
   };
 
   useEffect(() => {
