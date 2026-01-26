@@ -77,7 +77,7 @@ router.post('/register', async (req, res) => {
 
       // Get plan modules for organization
       const planModulesResult = await query(
-        `SELECT has_campaigns, has_asaas_integration, has_whatsapp_groups, has_scheduled_messages, has_chatbots FROM plans WHERE id = $1`,
+        `SELECT has_campaigns, has_asaas_integration, has_whatsapp_groups, has_scheduled_messages, has_chatbots, has_chat FROM plans WHERE id = $1`,
         [selectedPlan.id]
       );
       
@@ -86,7 +86,8 @@ router.post('/register', async (req, res) => {
         billing: true,
         groups: true,
         scheduled_messages: true,
-        chatbots: true
+        chatbots: true,
+        chat: true
       };
       
       if (planModulesResult.rows.length > 0) {
@@ -96,7 +97,8 @@ router.post('/register', async (req, res) => {
           billing: plan.has_asaas_integration ?? true,
           groups: plan.has_whatsapp_groups ?? true,
           scheduled_messages: plan.has_scheduled_messages ?? true,
-          chatbots: plan.has_chatbots ?? true
+          chatbots: plan.has_chatbots ?? true,
+          chat: plan.has_chat ?? true
         };
       }
 

@@ -16,7 +16,7 @@ import { useOrganizations } from '@/hooks/use-organizations';
 import { useSuperadmin } from '@/hooks/use-superadmin';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
-import { Building2, Plus, Users, Trash2, UserPlus, Crown, Shield, User, Briefcase, Loader2, Pencil, Link2, Settings, KeyRound, Megaphone, Receipt, UsersRound, CalendarClock, Bot, Layers } from 'lucide-react';
+import { Building2, Plus, Users, Trash2, UserPlus, Crown, Shield, User, Briefcase, Loader2, Pencil, Link2, Settings, KeyRound, Megaphone, Receipt, UsersRound, CalendarClock, Bot, Layers, MessagesSquare } from 'lucide-react';
 
 interface Organization {
   id: string;
@@ -119,6 +119,7 @@ export default function Organizacoes() {
     groups: true,
     scheduled_messages: true,
     chatbots: true,
+    chat: true,
   });
   const [savingModules, setSavingModules] = useState(false);
 
@@ -189,6 +190,7 @@ export default function Organizacoes() {
         groups: modules.groups ?? true,
         scheduled_messages: modules.scheduled_messages ?? true,
         chatbots: modules.chatbots ?? true,
+        chat: modules.chat ?? true,
       });
     } catch (error) {
       console.error('Error loading modules:', error);
@@ -911,6 +913,26 @@ export default function Organizacoes() {
                           <Switch
                             checked={modulesEnabled.scheduled_messages}
                             onCheckedChange={(checked) => setModulesEnabled(prev => ({ ...prev, scheduled_messages: checked }))}
+                            disabled={!canManageOrg}
+                          />
+                        </div>
+
+                        {/* Chat */}
+                        <div className="flex items-center justify-between rounded-lg border p-4">
+                          <div className="flex items-center gap-4">
+                            <div className="h-10 w-10 rounded-lg bg-indigo-500/10 flex items-center justify-center">
+                              <MessagesSquare className="h-5 w-5 text-indigo-500" />
+                            </div>
+                            <div>
+                              <p className="font-medium">Chat WhatsApp</p>
+                              <p className="text-sm text-muted-foreground">
+                                Atendimento e conversa com clientes via WhatsApp
+                              </p>
+                            </div>
+                          </div>
+                          <Switch
+                            checked={modulesEnabled.chat}
+                            onCheckedChange={(checked) => setModulesEnabled(prev => ({ ...prev, chat: checked }))}
                             disabled={!canManageOrg}
                           />
                         </div>
