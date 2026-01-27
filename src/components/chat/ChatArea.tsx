@@ -1092,7 +1092,7 @@ export function ChatArea({
 
               <div
                 className={cn(
-                  "rounded-lg transition-all",
+                  "rounded-lg transition-all overflow-hidden",
                   isMobile ? "max-w-[85%] p-2.5" : "max-w-[70%] p-3",
                   msg.from_me
                     ? "message-sent"
@@ -1102,6 +1102,7 @@ export function ChatArea({
                   isCurrentResult && "ring-2 ring-yellow-500 bg-yellow-50 dark:bg-yellow-900/30",
                   msg.status === 'failed' && "ring-2 ring-destructive bg-destructive/10"
                 )}
+                style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}
               >
                 {/* Sender name for group messages */}
                 {conversation?.is_group && !msg.from_me && msg.sender_name && (
@@ -1232,7 +1233,7 @@ export function ChatArea({
 
                 {/* Text content */}
                 {msg.content && (
-                  <p className="text-sm whitespace-pre-wrap break-words">
+                  <p className="text-sm whitespace-pre-wrap" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
                     {searchQuery ? highlightText(msg.content, searchQuery) : msg.content}
                   </p>
                 )}
