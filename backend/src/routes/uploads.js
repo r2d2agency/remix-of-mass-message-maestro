@@ -65,9 +65,28 @@ const fileFilter = (req, file, cb) => {
     'application/x-zip-compressed',
   ];
 
+  // Fallback extension allowlist (some browsers/mobile send generic mimetypes)
+  const allowedExts = [
+    // images
+    '.jpg', '.jpeg', '.png', '.gif', '.webp',
+    // audio
+    '.mp3', '.ogg', '.wav', '.webm', '.aac', '.m4a',
+    // video
+    '.mp4', '.webm', '.ogg', '.mov', '.qt',
+    // documents
+    '.pdf', '.doc', '.docx', '.ppt', '.pptx', '.xls', '.xlsx', '.txt', '.csv',
+    // archives
+    '.zip', '.rar', '.7z',
+  ];
+
   if (allowedMimes.includes(file.mimetype)) {
     cb(null, true);
   } else {
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    if (ext && allowedExts.includes(ext)) {
+      cb(null, true);
+      return;
+    }
     cb(new Error(`Tipo de arquivo não permitido: ${file.mimetype}`), false);
   }
 };
@@ -81,30 +100,37 @@ const upload = multer({
 });
 
 // Upload single file
-router.post('/', authenticate, upload.single('file'), (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'Nenhum arquivo enviado' });
-    }
-
-    // Build the public URL - use backend domain, not frontend
-    const baseUrl = process.env.API_BASE_URL || 'https://whastsale-backend.exf0ty.easypanel.host';
-    const fileUrl = `${baseUrl}/uploads/${req.file.filename}`;
-
-    res.json({
-      success: true,
-      file: {
-        filename: req.file.filename,
-        originalName: req.file.originalname,
-        mimetype: req.file.mimetype,
-        size: req.file.size,
-        url: fileUrl,
+router.post('/', authenticate, (req, res) => {
+  upload.single('file')(req, res, (err) => {
+    try {
+      if (err) {
+        const msg = err?.message || 'Erro ao fazer upload';
+        return res.status(400).json({ error: msg });
       }
-    });
-  } catch (error) {
-    console.error('Upload error:', error);
-    res.status(500).json({ error: 'Erro ao fazer upload' });
-  }
+
+      if (!req.file) {
+        return res.status(400).json({ error: 'Nenhum arquivo enviado' });
+      }
+
+      // Build the public URL - use backend domain, not frontend
+      const baseUrl = process.env.API_BASE_URL || 'https://whastsale-backend.exf0ty.easypanel.host';
+      const fileUrl = `${baseUrl}/uploads/${req.file.filename}`;
+
+      res.json({
+        success: true,
+        file: {
+          filename: req.file.filename,
+          originalName: req.file.originalname,
+          mimetype: req.file.mimetype,
+          size: req.file.size,
+          url: fileUrl,
+        }
+      });
+    } catch (error) {
+      console.error('Upload error:', error);
+      res.status(500).json({ error: 'Erro ao fazer upload' });
+    }
+  });
 });
 
 // Delete file
