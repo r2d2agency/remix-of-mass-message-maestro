@@ -526,6 +526,32 @@ export function ChatArea({
     }
   };
 
+  const looksLikeFilename = (value: string) => {
+    const s = value.trim();
+    if (!s) return false;
+    if (s.length > 160) return false;
+    // common extensions (pdf, office, images, audio/video, archives)
+    return /\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|csv|zip|rar|7z|jpg|jpeg|png|gif|webp|mp3|ogg|wav|m4a|mp4|webm|mov)$/i.test(s);
+  };
+
+  const getDocumentDisplayName = (msg: ChatMessage, resolvedUrl?: string | null) => {
+    if (msg.content && looksLikeFilename(msg.content)) return msg.content.trim();
+
+    const raw = resolvedUrl || msg.media_url || '';
+    if (!raw) return 'Documento';
+    try {
+      const url = new URL(raw, window.location.origin);
+      const last = url.pathname.split('/').filter(Boolean).pop();
+      if (!last) return 'Documento';
+      const decoded = decodeURIComponent(last);
+      return decoded || 'Documento';
+    } catch {
+      const parts = String(raw).split('/');
+      const last = parts[parts.length - 1] || '';
+      return last || 'Documento';
+    }
+  };
+
   const handleConfirmFileUpload = async () => {
     if (!pendingFile) return;
 
@@ -539,7 +565,10 @@ export function ChatArea({
         else if (file.type.startsWith('video/')) type = 'video';
         else if (file.type.startsWith('audio/')) type = 'audio';
 
-        await onSendMessage('', type, url, undefined, file.type);
+        // For documents, send filename in content so W-API can set the correct filename
+        // (it uses "content" as filename) and UI can display it.
+        const content = type === 'document' ? file.name : '';
+        await onSendMessage(content, type, url, undefined, file.type);
         toast.success("Arquivo enviado!");
       }
     } catch (error) {
@@ -1274,15 +1303,17 @@ export function ChatArea({
                     href={mediaUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-2 text-sm underline mb-2"
+                    className="flex items-center gap-2 text-sm underline mb-2 min-w-0"
                   >
                     <FileText className="h-4 w-4" />
-                    Documento
+                    <span className="truncate">
+                      {getDocumentDisplayName(msg, mediaUrl)}
+                    </span>
                   </a>
                 )}
 
                 {/* Text content */}
-                {msg.content && (
+                {msg.content && !(msg.message_type === 'document' && looksLikeFilename(msg.content)) && (
                   <p className="text-sm whitespace-pre-wrap" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
                     {searchQuery ? highlightText(msg.content, searchQuery) : msg.content}
                   </p>
@@ -1311,8 +1342,13 @@ export function ChatArea({
                       className="h-5 px-2 text-[10px] text-destructive hover:text-destructive hover:bg-destructive/10"
                       onClick={async () => {
                         try {
+                          const retryContent =
+                            msg.content ||
+                            (msg.message_type === 'document'
+                              ? getDocumentDisplayName(msg, mediaUrl)
+                              : '');
                           await onSendMessage(
-                            msg.content || '',
+                            retryContent,
                             msg.message_type,
                             msg.media_url || undefined,
                             msg.quoted_message_id || undefined,
