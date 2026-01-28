@@ -206,8 +206,9 @@ export default function BillingQueue({ organizationId }: BillingQueueProps) {
     return end;
   };
 
-  const triggerManualSend = async (ruleId: string, ruleName: string, hasConnection: boolean) => {
-    if (!hasConnection) {
+  const triggerManualSend = async (ruleId: string, ruleName: string, connectionName: string | null) => {
+    // Only block if there's no connection at all
+    if (!connectionName) {
       toast.error(`A regra "${ruleName}" não tem conexão WhatsApp configurada. Configure uma conexão antes de disparar.`);
       return;
     }
@@ -220,7 +221,11 @@ export default function BillingQueue({ organizationId }: BillingQueueProps) {
       );
       
       if (result.success) {
-        toast.success(`Disparo concluído: ${result.sent} enviados, ${result.failed} falhas de ${result.total} total`);
+        if (result.total === 0) {
+          toast.info(`Nenhuma cobrança encontrada para esta regra no momento.`);
+        } else {
+          toast.success(`Disparo concluído: ${result.sent} enviados, ${result.failed} falhas de ${result.total} total`);
+        }
         loadQueue();
         if (activeTab === 'logs') loadLogs();
       } else {
@@ -228,8 +233,8 @@ export default function BillingQueue({ organizationId }: BillingQueueProps) {
       }
     } catch (err: any) {
       const errorMsg = err?.message || 'Erro desconhecido';
-      if (errorMsg.includes('conexão')) {
-        toast.error(`Regra sem conexão configurada. Vá em "Regras" e associe uma conexão WhatsApp.`);
+      if (errorMsg.toLowerCase().includes('conexão') || errorMsg.toLowerCase().includes('connection')) {
+        toast.error(`Problema com a conexão: ${errorMsg}`);
       } else {
         toast.error(`Erro ao disparar: ${errorMsg}`);
       }
@@ -515,11 +520,11 @@ export default function BillingQueue({ organizationId }: BillingQueueProps) {
                                   <span className="font-medium">{formatCurrency(item.total_value)}</span>
                                   <Button
                                     size="sm"
-                                    variant={item.connection_name && item.connection_status === 'connected' ? "default" : "outline"}
+                                    variant={item.connection_name ? "default" : "outline"}
                                     disabled={triggeringRule === item.rule_id || !item.connection_name}
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      triggerManualSend(item.rule_id, item.rule_name, !!item.connection_name && item.connection_status === 'connected');
+                                      triggerManualSend(item.rule_id, item.rule_name, item.connection_name);
                                     }}
                                     title={!item.connection_name ? 'Configure uma conexão primeiro' : 'Disparar agora'}
                                   >
