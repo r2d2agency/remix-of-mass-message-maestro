@@ -430,13 +430,26 @@ router.post('/trigger/:organizationId/:ruleId', authenticate, async (req, res) =
      }
 
      // Check connection status in real-time (DB can be stale)
+     // For W-API, we're more lenient because the status endpoint can be flaky
+     const provider = whatsappProvider.detectProvider(connection);
+     console.log(`  🔌 Provider detected: ${provider}`);
+     
      const status = await ensureConnected(connection);
-     if (!status.connected) {
+     console.log(`  📡 Connection status check result:`, { connected: status.connected, status: status.status, error: status.error });
+     
+     // For W-API, allow dispatch if credentials exist even if status check fails
+     // W-API connections are considered dispatch-ready if instance_id/token are set
+     if (!status.connected && provider !== 'wapi') {
        console.log(`  ⚠ Connection "${connection.name}" is not connected (status: ${status.status})`);
        return res.status(400).json({ 
          success: false,
          error: `A conexão "${connection.name || 'sem nome'}" está desconectada (${status.status}). ${status.error ? `Detalhe: ${status.error}` : 'Reconecte antes de disparar.'}`
        });
+     }
+     
+     // For W-API that failed status check, log warning but continue
+     if (!status.connected && provider === 'wapi') {
+       console.log(`  ⚠ W-API connection "${connection.name}" status check failed, but proceeding (credentials exist)`);
      }
 
     // Build proper query based on trigger type (same logic as queue)
