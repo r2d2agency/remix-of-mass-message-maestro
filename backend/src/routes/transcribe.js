@@ -1,6 +1,6 @@
 import express from 'express';
 import multer from 'multer';
-import { authenticateToken } from '../middleware/auth.js';
+import { authenticate } from '../middleware/auth.js';
 import { log, logError } from '../logger.js';
 
 const router = express.Router();
@@ -12,7 +12,7 @@ const upload = multer({
 });
 
 // POST /api/transcribe-audio - Transcribe audio using Lovable AI (Gemini)
-router.post('/', authenticateToken, upload.single('audio'), async (req, res) => {
+router.post('/', authenticate, upload.single('audio'), async (req, res) => {
   try {
     const audioFile = req.file;
     
