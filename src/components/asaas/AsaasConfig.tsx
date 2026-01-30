@@ -15,6 +15,7 @@ import { useAsaas } from "@/hooks/use-asaas";
 import { useNotifications } from "@/hooks/use-notifications";
 import BillingQueue from "./BillingQueue";
 import QueueManager from "./QueueManager";
+import SyncStatusPanel from "./SyncStatusPanel";
 import { 
   RefreshCw, Settings, Receipt, Users, Bell, Plus, Trash2, 
   CheckCircle, AlertCircle, Clock, Calendar, Link2,
@@ -598,6 +599,9 @@ export default function AsaasConfig({ organizationId, connections }: AsaasConfig
               </CardContent>
             </Card>
           )}
+
+          {/* Sync Status Panel - Always Visible */}
+          <SyncStatusPanel organizationId={organizationId} onSyncComplete={loadData} />
 
           <div className="grid gap-4 md:grid-cols-4">
             <Card>

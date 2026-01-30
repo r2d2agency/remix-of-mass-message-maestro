@@ -1466,7 +1466,8 @@ router.get('/auto-sync/:organizationId', async (req, res) => {
          auto_sync_enabled,
          sync_time_morning,
          check_time_morning,
-         last_sync_at
+         last_sync_at,
+         last_check_at
        FROM asaas_integrations 
        WHERE organization_id = $1`,
       [organizationId]
@@ -1478,6 +1479,7 @@ router.get('/auto-sync/:organizationId', async (req, res) => {
         sync_time_morning: '02:00',
         check_time_morning: '08:00',
         last_sync_at: null,
+        last_check_at: null,
       });
     }
 
@@ -1507,7 +1509,7 @@ router.patch('/auto-sync/:organizationId', async (req, res) => {
          check_time_morning = COALESCE($3, check_time_morning),
          updated_at = NOW()
        WHERE organization_id = $4
-       RETURNING auto_sync_enabled, sync_time_morning, check_time_morning, last_sync_at`,
+       RETURNING auto_sync_enabled, sync_time_morning, check_time_morning, last_sync_at, last_check_at`,
       [auto_sync_enabled, sync_time_morning, check_time_morning, organizationId]
     );
 
@@ -1644,10 +1646,10 @@ router.post('/auto-sync/:organizationId/sync-now', async (req, res) => {
 
     res.json({
       success: true,
+      synced_count: todayCount + tomorrowCount + overdueCount,
       today_synced: todayCount,
       tomorrow_synced: tomorrowCount,
       overdue_synced: overdueCount,
-      total: todayCount + tomorrowCount + overdueCount,
       message: `Sincronizados: ${todayCount} vence hoje, ${tomorrowCount} vence amanhã, ${overdueCount} vencidos`
     });
   } catch (error) {
@@ -1744,10 +1746,16 @@ router.post('/auto-sync/:organizationId/check-status', async (req, res) => {
       await new Promise(r => setTimeout(r, 50));
     }
 
+    // Update last check timestamp
+    await query(
+      `UPDATE asaas_integrations SET last_check_at = NOW() WHERE organization_id = $1`,
+      [organizationId]
+    );
+
     res.json({
       success: true,
-      checked,
-      updated,
+      checked_count: checked,
+      updated_count: updated,
       newly_paid: newlyPaid,
       message: `Verificados: ${checked} cobranças. ${newlyPaid} pagas encontradas.`
     });
