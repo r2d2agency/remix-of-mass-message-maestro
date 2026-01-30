@@ -46,6 +46,9 @@ const RESERVED_FIELDS = [
   { key: "source", label: "Origem", required: false },
   { key: "city", label: "Cidade", required: false },
   { key: "state", label: "Estado", required: false },
+  { key: "address", label: "Endereço", required: false },
+  { key: "zip_code", label: "CEP", required: false },
+  { key: "is_company", label: "É Empresa", required: false },
 ];
 
 export default function ProspectImportDialog({ open, onOpenChange }: Props) {
@@ -114,6 +117,12 @@ export default function ProspectImportDialog({ open, onOpenChange }: Props) {
           initialMappings.push({ column: col, targetField: "city", isNew: false });
         } else if (/estado|state|uf/i.test(colLower)) {
           initialMappings.push({ column: col, targetField: "state", isNew: false });
+        } else if (/endere[çc]o|address|logradouro|rua/i.test(colLower)) {
+          initialMappings.push({ column: col, targetField: "address", isNew: false });
+        } else if (/cep|zip|postal/i.test(colLower)) {
+          initialMappings.push({ column: col, targetField: "zip_code", isNew: false });
+        } else if (/empresa|company|pj|cnpj/i.test(colLower)) {
+          initialMappings.push({ column: col, targetField: "is_company", isNew: false });
         } else {
           // Check if matches existing custom field
           const existingField = customFields.find(f => 

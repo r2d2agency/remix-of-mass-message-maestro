@@ -1884,7 +1884,7 @@ router.post('/prospects', async (req, res) => {
     const org = await getUserOrg(req.userId);
     if (!org) return res.status(403).json({ error: 'No organization' });
 
-    const { name, phone, source } = req.body;
+    const { name, phone, source, city, state, address, zip_code, is_company } = req.body;
     if (!name || !phone) {
       return res.status(400).json({ error: 'Name and phone are required' });
     }
@@ -1905,10 +1905,21 @@ router.post('/prospects', async (req, res) => {
     }
 
     const result = await query(
-      `INSERT INTO crm_prospects (organization_id, name, phone, source, created_by)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO crm_prospects (organization_id, name, phone, source, city, state, address, zip_code, is_company, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
-      [org.organization_id, name.trim(), normalizedPhone, source?.trim() || null, req.userId]
+      [
+        org.organization_id, 
+        name.trim(), 
+        normalizedPhone, 
+        source?.trim() || null,
+        city?.trim() || null,
+        state?.trim() || null,
+        address?.trim() || null,
+        zip_code?.trim() || null,
+        is_company === true,
+        req.userId
+      ]
     );
     res.status(201).json(result.rows[0]);
   } catch (error) {
@@ -1953,7 +1964,7 @@ router.post('/prospects/bulk', async (req, res) => {
 
       // Extract custom fields (everything except reserved keys)
       const customFields = {};
-      const reservedKeys = ['name', 'phone', 'source', 'city', 'state'];
+      const reservedKeys = ['name', 'phone', 'source', 'city', 'state', 'address', 'zip_code', 'is_company'];
       Object.keys(p).forEach(key => {
         if (!reservedKeys.includes(key) && p[key]) {
           customFields[key] = p[key];
@@ -1962,8 +1973,8 @@ router.post('/prospects/bulk', async (req, res) => {
 
       try {
         await query(
-          `INSERT INTO crm_prospects (organization_id, name, phone, source, city, state, custom_fields, created_by)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          `INSERT INTO crm_prospects (organization_id, name, phone, source, city, state, address, zip_code, is_company, custom_fields, created_by)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
           [
             org.organization_id, 
             p.name.trim(), 
@@ -1971,6 +1982,9 @@ router.post('/prospects/bulk', async (req, res) => {
             p.source?.trim() || null, 
             p.city?.trim() || null,
             p.state?.trim() || null,
+            p.address?.trim() || null,
+            p.zip_code?.trim() || null,
+            p.is_company === true || p.is_company === 'true' || p.is_company === '1',
             JSON.stringify(customFields),
             req.userId
           ]
@@ -2111,6 +2125,19 @@ router.post('/prospects/:id/convert', async (req, res) => {
     }
     const stage_id = stageResult.rows[0].id;
 
+    // If prospect is a company, create company record
+    let company_id = null;
+    if (prospect.is_company) {
+      const companyResult = await query(
+        `INSERT INTO crm_companies (organization_id, name, phone, city, state, address, zip_code, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         ON CONFLICT (organization_id, name) DO UPDATE SET updated_at = NOW()
+         RETURNING id`,
+        [org.organization_id, prospect.name, prospect.phone, prospect.city, prospect.state, prospect.address, prospect.zip_code, req.userId]
+      );
+      company_id = companyResult.rows[0].id;
+    }
+
     // Create or find contact
     let contact_id = null;
     const existingContact = await query(
@@ -2140,18 +2167,18 @@ router.post('/prospects/:id/convert', async (req, res) => {
       }
 
       const newContact = await query(
-        `INSERT INTO contacts (list_id, name, phone) VALUES ($1, $2, $3) RETURNING id`,
-        [crmListResult.rows[0].id, prospect.name, prospect.phone]
+        `INSERT INTO contacts (list_id, name, phone, city, state) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+        [crmListResult.rows[0].id, prospect.name, prospect.phone, prospect.city, prospect.state]
       );
       contact_id = newContact.rows[0].id;
     }
 
-    // Create deal
+    // Create deal with company if applicable
     const dealResult = await query(
-      `INSERT INTO crm_deals (organization_id, funnel_id, stage_id, title, contact_id, assigned_to, source)
-       VALUES ($1, $2, $3, $4, $5, $6, 'prospect')
+      `INSERT INTO crm_deals (organization_id, funnel_id, stage_id, title, contact_id, company_id, assigned_to, source)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'prospect')
        RETURNING id`,
-      [org.organization_id, funnel_id, stage_id, title || prospect.name, contact_id, req.userId]
+      [org.organization_id, funnel_id, stage_id, title || prospect.name, contact_id, company_id, req.userId]
     );
     const deal_id = dealResult.rows[0].id;
 
@@ -2161,7 +2188,7 @@ router.post('/prospects/:id/convert', async (req, res) => {
       [deal_id, req.params.id]
     );
 
-    res.json({ deal_id });
+    res.json({ deal_id, company_id });
   } catch (error) {
     console.error('Error converting prospect:', error);
     res.status(500).json({ error: error.message });
@@ -2240,12 +2267,25 @@ router.post('/prospects/bulk-convert', async (req, res) => {
           contactId = newContact.rows[0].id;
         }
 
+        // If prospect is a company, create company record
+        let companyId = null;
+        if (prospect.is_company) {
+          const companyResult = await query(
+            `INSERT INTO crm_companies (organization_id, name, phone, city, state, address, zip_code, created_by)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+             ON CONFLICT (organization_id, name) DO UPDATE SET updated_at = NOW()
+             RETURNING id`,
+            [org.organization_id, prospect.name, prospect.phone, prospect.city, prospect.state, prospect.address, prospect.zip_code, req.userId]
+          );
+          companyId = companyResult.rows[0].id;
+        }
+
         // Create deal
         const dealResult = await query(
-          `INSERT INTO crm_deals (organization_id, funnel_id, stage_id, title, contact_id, source, responsible_id)
-           VALUES ($1, $2, $3, $4, $5, 'prospect', $6)
+          `INSERT INTO crm_deals (organization_id, funnel_id, stage_id, title, contact_id, company_id, source, responsible_id)
+           VALUES ($1, $2, $3, $4, $5, $6, 'prospect', $7)
            RETURNING id`,
-          [org.organization_id, funnel_id, stage_id, prospect.name, contactId, req.userId]
+          [org.organization_id, funnel_id, stage_id, prospect.name, contactId, companyId, req.userId]
         );
 
         // Mark prospect as converted

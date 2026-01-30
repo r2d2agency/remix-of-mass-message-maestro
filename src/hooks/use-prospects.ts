@@ -7,6 +7,11 @@ export interface Prospect {
   name: string;
   phone: string;
   source?: string;
+  city?: string;
+  state?: string;
+  address?: string;
+  zip_code?: string;
+  is_company?: boolean;
   converted_at?: string;
   converted_deal_id?: string;
   created_at: string;
@@ -20,7 +25,18 @@ async function fetchProspects(): Promise<Prospect[]> {
   return res.json();
 }
 
-async function createProspect(data: { name: string; phone: string; source?: string }): Promise<Prospect> {
+interface CreateProspectData {
+  name: string;
+  phone: string;
+  source?: string;
+  city?: string;
+  state?: string;
+  address?: string;
+  zip_code?: string;
+  is_company?: boolean;
+}
+
+async function createProspect(data: CreateProspectData): Promise<Prospect> {
   const res = await fetch(`${API_URL}/api/crm/prospects`, {
     method: "POST",
     headers: {

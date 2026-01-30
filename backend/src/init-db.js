@@ -1654,6 +1654,9 @@ CREATE TABLE IF NOT EXISTS crm_prospects (
     source VARCHAR(100),
     city VARCHAR(100),
     state VARCHAR(50),
+    address TEXT,
+    zip_code VARCHAR(20),
+    is_company BOOLEAN DEFAULT false,
     custom_fields JSONB DEFAULT '{}',
     converted_at TIMESTAMP WITH TIME ZONE,
     converted_deal_id UUID REFERENCES crm_deals(id) ON DELETE SET NULL,
@@ -1663,11 +1666,14 @@ CREATE TABLE IF NOT EXISTS crm_prospects (
     UNIQUE(organization_id, phone)
 );
 
--- Add custom_fields column if not exists
+-- Add new columns if not exists
 DO $$ BEGIN
     ALTER TABLE crm_prospects ADD COLUMN IF NOT EXISTS custom_fields JSONB DEFAULT '{}';
     ALTER TABLE crm_prospects ADD COLUMN IF NOT EXISTS city VARCHAR(100);
     ALTER TABLE crm_prospects ADD COLUMN IF NOT EXISTS state VARCHAR(50);
+    ALTER TABLE crm_prospects ADD COLUMN IF NOT EXISTS address TEXT;
+    ALTER TABLE crm_prospects ADD COLUMN IF NOT EXISTS zip_code VARCHAR(20);
+    ALTER TABLE crm_prospects ADD COLUMN IF NOT EXISTS is_company BOOLEAN DEFAULT false;
 EXCEPTION WHEN duplicate_column THEN NULL; END $$;
 
 -- Indexes for prospects
