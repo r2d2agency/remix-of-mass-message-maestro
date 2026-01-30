@@ -59,6 +59,7 @@ export async function executeFlow(flowId, conversationId, startNodeId = 'start')
     });
 
     // Create edge map (source_node_id -> edges)
+    // Sort edges by target node's Y position to maintain visual flow order
     const edgeMap = new Map();
     edges.forEach(edge => {
       const key = edge.source_node_id;
@@ -66,6 +67,22 @@ export async function executeFlow(flowId, conversationId, startNodeId = 'start')
         edgeMap.set(key, []);
       }
       edgeMap.get(key).push(edge);
+    });
+    
+    // Sort edges by target node's Y position (top to bottom = execution order)
+    edgeMap.forEach((edgeList, key) => {
+      edgeList.sort((a, b) => {
+        const nodeA = nodeMap.get(a.target_node_id);
+        const nodeB = nodeMap.get(b.target_node_id);
+        // Primary sort: Y position (top first)
+        const yA = nodeA?.position_y ?? 0;
+        const yB = nodeB?.position_y ?? 0;
+        if (yA !== yB) return yA - yB;
+        // Secondary sort: X position (left first)
+        const xA = nodeA?.position_x ?? 0;
+        const xB = nodeB?.position_x ?? 0;
+        return xA - xB;
+      });
     });
 
     // Initialize session variables
@@ -711,6 +728,20 @@ async function resumeFlowFromNode(flowId, conversationId, startNodeId, variables
         edgeMap.set(key, []);
       }
       edgeMap.get(key).push(edge);
+    });
+    
+    // Sort edges by target node's Y position (top to bottom = execution order)
+    edgeMap.forEach((edgeList, key) => {
+      edgeList.sort((a, b) => {
+        const nodeA = nodeMap.get(a.target_node_id);
+        const nodeB = nodeMap.get(b.target_node_id);
+        const yA = nodeA?.position_y ?? 0;
+        const yB = nodeB?.position_y ?? 0;
+        if (yA !== yB) return yA - yB;
+        const xA = nodeA?.position_x ?? 0;
+        const xB = nodeB?.position_x ?? 0;
+        return xA - xB;
+      });
     });
 
     // Start processing from the given node
