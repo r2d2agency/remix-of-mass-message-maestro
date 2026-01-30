@@ -29,6 +29,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import {
   ArrowRight,
+  Building2,
   Check,
   FileSpreadsheet,
   MoreHorizontal,
@@ -56,7 +57,16 @@ export default function CRMProspects() {
   const { data: funnels } = useCRMFunnels();
 
   // New prospect form
-  const [newProspect, setNewProspect] = useState({ name: "", phone: "", source: "" });
+  const [newProspect, setNewProspect] = useState({ 
+    name: "", 
+    phone: "", 
+    source: "",
+    city: "",
+    state: "",
+    address: "",
+    zip_code: "",
+    is_company: false
+  });
   
   // Convert form
   const [convertForm, setConvertForm] = useState({ funnel_id: "", title: "" });
@@ -94,7 +104,16 @@ export default function CRMProspects() {
       return;
     }
     await createProspect.mutateAsync(newProspect);
-    setNewProspect({ name: "", phone: "", source: "" });
+    setNewProspect({ 
+      name: "", 
+      phone: "", 
+      source: "",
+      city: "",
+      state: "",
+      address: "",
+      zip_code: "",
+      is_company: false
+    });
     setShowAddDialog(false);
   };
 
@@ -288,7 +307,9 @@ export default function CRMProspects() {
                   </TableHead>
                   <TableHead>Nome</TableHead>
                   <TableHead>Telefone</TableHead>
+                  <TableHead>Localização</TableHead>
                   <TableHead>Origem</TableHead>
+                  <TableHead>Tipo</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Criado em</TableHead>
                   <TableHead className="w-12"></TableHead>
@@ -297,13 +318,13 @@ export default function CRMProspects() {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8">
+                    <TableCell colSpan={9} className="text-center py-8">
                       Carregando...
                     </TableCell>
                   </TableRow>
                 ) : filteredProspects.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8">
+                    <TableCell colSpan={9} className="text-center py-8">
                       <div className="flex flex-col items-center gap-2">
                         <Users className="h-8 w-8 text-muted-foreground" />
                         <p className="text-muted-foreground">Nenhum prospect encontrado</p>
@@ -326,10 +347,29 @@ export default function CRMProspects() {
                       <TableCell className="font-medium">{prospect.name}</TableCell>
                       <TableCell>{prospect.phone}</TableCell>
                       <TableCell>
+                        {prospect.city || prospect.state ? (
+                          <span className="text-sm text-muted-foreground">
+                            {[prospect.city, prospect.state].filter(Boolean).join(", ")}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
                         {prospect.source ? (
                           <Badge variant="secondary">{prospect.source}</Badge>
                         ) : (
                           <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {prospect.is_company ? (
+                          <Badge variant="outline" className="border-blue-500 text-blue-600">
+                            <Building2 className="h-3 w-3 mr-1" />
+                            Empresa
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline">Pessoa</Badge>
                         )}
                       </TableCell>
                       <TableCell>
@@ -380,39 +420,97 @@ export default function CRMProspects() {
 
       {/* Add Prospect Dialog */}
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Novo Prospect</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Nome *</Label>
-              <Input
-                id="name"
-                value={newProspect.name}
-                onChange={(e) => setNewProspect(p => ({ ...p, name: e.target.value }))}
-                placeholder="Nome do prospect"
-              />
+          <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2 col-span-2">
+                <Label htmlFor="name">Nome *</Label>
+                <Input
+                  id="name"
+                  value={newProspect.name}
+                  onChange={(e) => setNewProspect(p => ({ ...p, name: e.target.value }))}
+                  placeholder="Nome do prospect"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="phone">Telefone *</Label>
+                <Input
+                  id="phone"
+                  value={newProspect.phone}
+                  onChange={(e) => setNewProspect(p => ({ ...p, phone: e.target.value }))}
+                  placeholder="5511999999999"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="source">Origem</Label>
+                <Input
+                  id="source"
+                  value={newProspect.source}
+                  onChange={(e) => setNewProspect(p => ({ ...p, source: e.target.value }))}
+                  placeholder="Ex: Instagram"
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="phone">Telefone *</Label>
-              <Input
-                id="phone"
-                value={newProspect.phone}
-                onChange={(e) => setNewProspect(p => ({ ...p, phone: e.target.value }))}
-                placeholder="5511999999999"
-              />
+            
+            {/* Address section */}
+            <div className="border-t pt-4">
+              <p className="text-sm text-muted-foreground mb-3">Endereço (opcional)</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2 col-span-2">
+                  <Label htmlFor="address">Endereço</Label>
+                  <Input
+                    id="address"
+                    value={newProspect.address}
+                    onChange={(e) => setNewProspect(p => ({ ...p, address: e.target.value }))}
+                    placeholder="Rua, número, complemento"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="city">Cidade</Label>
+                  <Input
+                    id="city"
+                    value={newProspect.city}
+                    onChange={(e) => setNewProspect(p => ({ ...p, city: e.target.value }))}
+                    placeholder="São Paulo"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="state">Estado</Label>
+                  <Input
+                    id="state"
+                    value={newProspect.state}
+                    onChange={(e) => setNewProspect(p => ({ ...p, state: e.target.value }))}
+                    placeholder="SP"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="zip_code">CEP</Label>
+                  <Input
+                    id="zip_code"
+                    value={newProspect.zip_code}
+                    onChange={(e) => setNewProspect(p => ({ ...p, zip_code: e.target.value }))}
+                    placeholder="01234-567"
+                  />
+                </div>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="source">Origem</Label>
-              <Input
-                id="source"
-                value={newProspect.source}
-                onChange={(e) => setNewProspect(p => ({ ...p, source: e.target.value }))}
-                placeholder="Ex: Landing Page, Instagram, Indicação"
+            
+            {/* Company checkbox */}
+            <div className="flex items-center space-x-2 border-t pt-4">
+              <Checkbox
+                id="is_company"
+                checked={newProspect.is_company}
+                onCheckedChange={(checked) => setNewProspect(p => ({ ...p, is_company: checked as boolean }))}
               />
+              <Label htmlFor="is_company" className="text-sm cursor-pointer">
+                Este prospect é uma empresa (será criada automaticamente ao converter)
+              </Label>
             </div>
-            <div className="flex justify-end gap-2">
+            
+            <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" onClick={() => setShowAddDialog(false)}>
                 Cancelar
               </Button>
