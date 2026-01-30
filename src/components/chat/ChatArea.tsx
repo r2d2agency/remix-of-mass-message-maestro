@@ -108,6 +108,9 @@ import { ScheduleMessageDialog } from "./ScheduleMessageDialog";
 import { ScheduledMessage } from "@/hooks/use-chat";
 import { StartFlowDialog } from "./StartFlowDialog";
 import { DealLinkDialog } from "./DealLinkDialog";
+import { useCRMDealsByPhone, CRMDeal } from "@/hooks/use-crm";
+import { DealDetailDialog } from "@/components/crm/DealDetailDialog";
+
 interface ChatAreaProps {
   conversation: Conversation | null;
   messages: ChatMessage[];
@@ -225,6 +228,8 @@ export function ChatArea({
   const [profilePictureUrl, setProfilePictureUrl] = useState<string | null>(null);
   const [showStartFlowDialog, setShowStartFlowDialog] = useState(false);
   const [showDealDialog, setShowDealDialog] = useState(false);
+  const [showDealDetailDialog, setShowDealDetailDialog] = useState(false);
+  const [selectedDeal, setSelectedDeal] = useState<CRMDeal | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -240,6 +245,13 @@ export function ChatArea({
   const dragCounterRef = useRef(0);
   const { user } = useAuth();
   const { getNotes, getTypingStatus, getScheduledMessages, scheduleMessage, cancelScheduledMessage } = useChat();
+  
+  // Fetch CRM deals for this contact
+  const { data: contactDeals, isLoading: loadingDeals } = useCRMDealsByPhone(
+    conversation?.contact_phone && !conversation.is_group ? conversation.contact_phone : null
+  );
+  const openDeals = contactDeals?.filter(d => d.status === 'open') || [];
+  
   const {
     isRecording,
     duration,
@@ -1083,6 +1095,76 @@ export function ChatArea({
               </Badge>
             ))}
           </div>
+
+          {/* CRM Deal Shortcut - Shows if contact has open deals */}
+          {!conversation.is_group && openDeals.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={cn(
+                    "text-primary border-primary/30 hover:bg-primary/10 relative",
+                    isMobile ? "h-7 px-2" : "h-8"
+                  )}
+                  title={`${openDeals.length} negociação(ões) aberta(s)`}
+                >
+                  <Briefcase className="h-3.5 w-3.5" />
+                  {!isMobile && <span className="ml-1.5 text-xs">CRM</span>}
+                  <Badge 
+                    variant="secondary" 
+                    className="absolute -top-1.5 -right-1.5 h-4 min-w-[16px] px-1 text-[10px] bg-primary text-primary-foreground"
+                  >
+                    {openDeals.length}
+                  </Badge>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-72">
+                <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                  Negociações abertas
+                </div>
+                <DropdownMenuSeparator />
+                {openDeals.slice(0, 5).map(deal => (
+                  <DropdownMenuItem
+                    key={deal.id}
+                    onClick={() => {
+                      setSelectedDeal(deal);
+                      setShowDealDetailDialog(true);
+                    }}
+                    className="flex flex-col items-start gap-1 py-2"
+                  >
+                    <div className="flex items-center gap-2 w-full">
+                      <span className="font-medium truncate flex-1">{deal.title}</span>
+                      {deal.stage_color && (
+                        <Badge 
+                          variant="outline" 
+                          className="text-[10px] h-5 px-1.5"
+                          style={{ borderColor: deal.stage_color, color: deal.stage_color }}
+                        >
+                          {deal.stage_name}
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span>{deal.company_name}</span>
+                      <span>•</span>
+                      <span className="font-medium text-foreground">
+                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(deal.value)}
+                      </span>
+                    </div>
+                  </DropdownMenuItem>
+                ))}
+                {openDeals.length > 5 && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <div className="px-2 py-1.5 text-xs text-muted-foreground text-center">
+                      +{openDeals.length - 5} negociação(ões)
+                    </div>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
 
           {/* Add Tag */}
           <DropdownMenu>
@@ -2253,6 +2335,16 @@ export function ChatArea({
           contactPhone={conversation.contact_phone}
         />
       )}
+
+      {/* Deal Detail Dialog - for opening existing deals from chat */}
+      <DealDetailDialog
+        deal={selectedDeal}
+        open={showDealDetailDialog}
+        onOpenChange={(open) => {
+          setShowDealDetailDialog(open);
+          if (!open) setSelectedDeal(null);
+        }}
+      />
     </div>
   );
 }

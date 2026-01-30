@@ -351,6 +351,19 @@ export function useCRMDealsSearch(search?: string) {
   });
 }
 
+// Get deals by contact phone (for chat integration)
+export function useCRMDealsByPhone(phone: string | null | undefined) {
+  return useQuery({
+    queryKey: ["crm-deals-by-phone", phone],
+    queryFn: async () => {
+      if (!phone) return [];
+      return api<CRMDeal[]>(`/api/crm/deals/by-phone/${encodeURIComponent(phone)}`);
+    },
+    enabled: !!phone && phone.length >= 8,
+    staleTime: 30000, // Cache for 30 seconds
+  });
+}
+
 export function useCRMDeals(funnelId: string | null) {
   return useQuery({
     queryKey: ["crm-deals", funnelId],

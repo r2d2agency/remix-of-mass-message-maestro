@@ -578,6 +578,48 @@ router.get('/deals', async (req, res) => {
   }
 });
 
+// Get deals by contact phone number (for chat integration)
+router.get('/deals/by-phone/:phone', async (req, res) => {
+  try {
+    const org = await getUserOrg(req.userId);
+    if (!org) return res.status(403).json({ error: 'No organization' });
+
+    const phone = req.params.phone.replace(/\D/g, '');
+    if (!phone || phone.length < 8) {
+      return res.status(400).json({ error: 'Invalid phone number' });
+    }
+
+    // Use last 11 digits for matching (handles country code variations)
+    const phonePattern = `%${phone.slice(-11)}%`;
+
+    const result = await query(
+      `SELECT DISTINCT d.*, 
+        c.name as company_name,
+        u.name as owner_name,
+        s.name as stage_name,
+        s.color as stage_color,
+        f.name as funnel_name
+       FROM crm_deals d
+       LEFT JOIN crm_companies c ON c.id = d.company_id
+       LEFT JOIN users u ON u.id = d.owner_id
+       LEFT JOIN crm_stages s ON s.id = d.stage_id
+       LEFT JOIN crm_funnels f ON f.id = d.funnel_id
+       JOIN crm_deal_contacts dc ON dc.deal_id = d.id
+       JOIN contacts cnt ON cnt.id = dc.contact_id
+       WHERE d.organization_id = $1 
+         AND cnt.phone LIKE $2
+       ORDER BY d.status = 'open' DESC, d.updated_at DESC
+       LIMIT 10`,
+      [org.organization_id, phonePattern]
+    );
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching deals by phone:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get deals for kanban (by funnel)
 router.get('/funnels/:funnelId/deals', async (req, res) => {
   try {
