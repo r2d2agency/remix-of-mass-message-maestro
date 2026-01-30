@@ -302,9 +302,18 @@ async function processMenuNode(content, connection, phone, variables, conversati
 
 /**
  * Process input node - send prompt for user input
+ * The frontend saves the prompt in content.text, so we check that field as well
  */
 async function processInputNode(content, connection, phone, variables, conversationId) {
-  let promptText = content.prompt || content.message || 'Digite sua resposta:';
+  // Check text field first (frontend saves here), then prompt/message as fallbacks
+  let promptText = content.text || content.prompt || content.message || '';
+  
+  // Only send if there's actual prompt text - don't send default placeholder
+  if (!promptText || !promptText.trim()) {
+    console.log('Flow executor: Input node has no prompt text, skipping message send');
+    return; // Don't send any message, just wait for input
+  }
+  
   promptText = replaceVariables(promptText, variables);
 
   const result = await whatsappProvider.sendMessage(connection, phone, promptText, 'text');
