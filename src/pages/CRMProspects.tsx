@@ -69,8 +69,14 @@ export default function CRMProspects() {
   });
   
   // Convert form
-  const [convertForm, setConvertForm] = useState({ funnel_id: "", title: "" });
+  const [convertForm, setConvertForm] = useState({ 
+    funnel_id: "", 
+    title: "",
+    create_company: false,
+    company_name: ""
+  });
   const [bulkConvertFunnelId, setBulkConvertFunnelId] = useState("");
+  const [bulkCreateCompanies, setBulkCreateCompanies] = useState(false);
 
   const filteredProspects = useMemo(() => {
     if (!search.trim()) return prospects;
@@ -131,7 +137,12 @@ export default function CRMProspects() {
 
   const openConvertDialog = (prospect: Prospect) => {
     setConvertingProspect(prospect);
-    setConvertForm({ funnel_id: funnels?.[0]?.id || "", title: prospect.name });
+    setConvertForm({ 
+      funnel_id: funnels?.[0]?.id || "", 
+      title: prospect.name,
+      create_company: prospect.is_company || false,
+      company_name: prospect.is_company ? prospect.name : ""
+    });
     setShowConvertDialog(true);
   };
 
@@ -140,10 +151,16 @@ export default function CRMProspects() {
       toast.error("Selecione um funil");
       return;
     }
+    if (convertForm.create_company && !convertForm.company_name.trim()) {
+      toast.error("Informe o nome da empresa");
+      return;
+    }
     await convertToDeal.mutateAsync({
       prospect_id: convertingProspect.id,
       funnel_id: convertForm.funnel_id,
       title: convertForm.title || convertingProspect.name,
+      create_company: convertForm.create_company,
+      company_name: convertForm.company_name.trim() || undefined,
     });
     setShowConvertDialog(false);
     setConvertingProspect(null);
@@ -177,6 +194,7 @@ export default function CRMProspects() {
     await bulkConvert.mutateAsync({
       prospect_ids: unconvertedIds,
       funnel_id: bulkConvertFunnelId,
+      create_companies: bulkCreateCompanies,
     });
     setShowBulkConvertDialog(false);
     setSelectedIds([]);
@@ -530,11 +548,18 @@ export default function CRMProspects() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="p-3 bg-muted rounded-lg">
-              <p className="text-sm">
-                <strong>{convertingProspect?.name}</strong>
-              </p>
+              <div className="flex items-center gap-2">
+                <strong className="text-sm">{convertingProspect?.name}</strong>
+                {convertingProspect?.is_company && (
+                  <Badge variant="outline" className="border-blue-500 text-blue-600 text-xs">
+                    <Building2 className="h-3 w-3 mr-1" />
+                    Empresa
+                  </Badge>
+                )}
+              </div>
               <p className="text-sm text-muted-foreground">{convertingProspect?.phone}</p>
             </div>
+            
             <div className="space-y-2">
               <Label>Funil *</Label>
               <select
@@ -548,6 +573,7 @@ export default function CRMProspects() {
                 ))}
               </select>
             </div>
+            
             <div className="space-y-2">
               <Label htmlFor="deal-title">Título da Negociação</Label>
               <Input
@@ -557,7 +583,38 @@ export default function CRMProspects() {
                 placeholder="Título da negociação"
               />
             </div>
-            <div className="flex justify-end gap-2">
+            
+            {/* Create Company Option */}
+            <div className="border-t pt-4 space-y-3">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="create_company"
+                  checked={convertForm.create_company}
+                  onCheckedChange={(checked) => setConvertForm(f => ({ 
+                    ...f, 
+                    create_company: checked as boolean,
+                    company_name: checked ? (f.company_name || convertingProspect?.name || "") : ""
+                  }))}
+                />
+                <Label htmlFor="create_company" className="text-sm cursor-pointer">
+                  Criar empresa no CRM
+                </Label>
+              </div>
+              
+              {convertForm.create_company && (
+                <div className="space-y-2 ml-6">
+                  <Label htmlFor="company_name">Nome da Empresa</Label>
+                  <Input
+                    id="company_name"
+                    value={convertForm.company_name}
+                    onChange={(e) => setConvertForm(f => ({ ...f, company_name: e.target.value }))}
+                    placeholder="Nome da empresa"
+                  />
+                </div>
+              )}
+            </div>
+            
+            <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" onClick={() => setShowConvertDialog(false)}>
                 Cancelar
               </Button>
@@ -584,6 +641,7 @@ export default function CRMProspects() {
                 Prospects já convertidos serão ignorados.
               </p>
             </div>
+            
             <div className="space-y-2">
               <Label>Funil de Destino *</Label>
               <select
@@ -597,7 +655,23 @@ export default function CRMProspects() {
                 ))}
               </select>
             </div>
-            <div className="flex justify-end gap-2">
+            
+            {/* Create Companies Option */}
+            <div className="flex items-center space-x-2 border-t pt-4">
+              <Checkbox
+                id="bulk_create_companies"
+                checked={bulkCreateCompanies}
+                onCheckedChange={(checked) => setBulkCreateCompanies(checked as boolean)}
+              />
+              <Label htmlFor="bulk_create_companies" className="text-sm cursor-pointer">
+                <span className="flex items-center gap-1">
+                  <Building2 className="h-4 w-4" />
+                  Criar empresas para todos os prospects
+                </span>
+              </Label>
+            </div>
+            
+            <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" onClick={() => setShowBulkConvertDialog(false)}>
                 Cancelar
               </Button>
