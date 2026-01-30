@@ -2096,7 +2096,7 @@ router.post('/prospects/:id/convert', async (req, res) => {
     const org = await getUserOrg(req.userId);
     if (!org) return res.status(403).json({ error: 'No organization' });
 
-    const { funnel_id, title } = req.body;
+    const { funnel_id, title, create_company, company_name } = req.body;
     if (!funnel_id) {
       return res.status(400).json({ error: 'Funnel ID is required' });
     }
@@ -2125,15 +2125,17 @@ router.post('/prospects/:id/convert', async (req, res) => {
     }
     const stage_id = stageResult.rows[0].id;
 
-    // If prospect is a company, create company record
+    // Create company if requested (either from is_company flag or explicit create_company param)
     let company_id = null;
-    if (prospect.is_company) {
+    const shouldCreateCompany = create_company === true || prospect.is_company;
+    if (shouldCreateCompany) {
+      const companyNameToUse = company_name?.trim() || prospect.name;
       const companyResult = await query(
         `INSERT INTO crm_companies (organization_id, name, phone, city, state, address, zip_code, created_by)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          ON CONFLICT (organization_id, name) DO UPDATE SET updated_at = NOW()
          RETURNING id`,
-        [org.organization_id, prospect.name, prospect.phone, prospect.city, prospect.state, prospect.address, prospect.zip_code, req.userId]
+        [org.organization_id, companyNameToUse, prospect.phone, prospect.city, prospect.state, prospect.address, prospect.zip_code, req.userId]
       );
       company_id = companyResult.rows[0].id;
     }
@@ -2201,7 +2203,7 @@ router.post('/prospects/bulk-convert', async (req, res) => {
     const org = await getUserOrg(req.userId);
     if (!org) return res.status(403).json({ error: 'No organization' });
 
-    const { prospect_ids, funnel_id } = req.body;
+    const { prospect_ids, funnel_id, create_companies } = req.body;
     if (!Array.isArray(prospect_ids) || prospect_ids.length === 0 || !funnel_id) {
       return res.status(400).json({ error: 'prospect_ids array and funnel_id are required' });
     }
@@ -2218,6 +2220,7 @@ router.post('/prospects/bulk-convert', async (req, res) => {
 
     let converted = 0;
     let skipped = 0;
+    let companies_created = 0;
 
     for (const prospect_id of prospect_ids) {
       try {
@@ -2267,9 +2270,10 @@ router.post('/prospects/bulk-convert', async (req, res) => {
           contactId = newContact.rows[0].id;
         }
 
-        // If prospect is a company, create company record
+        // Create company if requested or if prospect is marked as company
         let companyId = null;
-        if (prospect.is_company) {
+        const shouldCreateCompany = create_companies === true || prospect.is_company;
+        if (shouldCreateCompany) {
           const companyResult = await query(
             `INSERT INTO crm_companies (organization_id, name, phone, city, state, address, zip_code, created_by)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -2278,6 +2282,7 @@ router.post('/prospects/bulk-convert', async (req, res) => {
             [org.organization_id, prospect.name, prospect.phone, prospect.city, prospect.state, prospect.address, prospect.zip_code, req.userId]
           );
           companyId = companyResult.rows[0].id;
+          companies_created++;
         }
 
         // Create deal
@@ -2301,7 +2306,7 @@ router.post('/prospects/bulk-convert', async (req, res) => {
       }
     }
 
-    res.json({ converted, skipped });
+    res.json({ converted, skipped, companies_created });
   } catch (error) {
     console.error('Error bulk converting prospects:', error);
     res.status(500).json({ error: error.message });

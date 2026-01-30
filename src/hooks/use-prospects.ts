@@ -108,14 +108,25 @@ async function bulkDelete(ids: string[]): Promise<void> {
   if (!res.ok) throw new Error("Failed to delete prospects");
 }
 
-async function convertToDeal(data: { prospect_id: string; funnel_id: string; title?: string }): Promise<{ deal_id: string }> {
+async function convertToDeal(data: { 
+  prospect_id: string; 
+  funnel_id: string; 
+  title?: string;
+  create_company?: boolean;
+  company_name?: string;
+}): Promise<{ deal_id: string; company_id?: string }> {
   const res = await fetch(`${API_URL}/api/crm/prospects/${data.prospect_id}/convert`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${getAuthToken()}`,
     },
-    body: JSON.stringify({ funnel_id: data.funnel_id, title: data.title }),
+    body: JSON.stringify({ 
+      funnel_id: data.funnel_id, 
+      title: data.title,
+      create_company: data.create_company,
+      company_name: data.company_name,
+    }),
   });
   if (!res.ok) {
     const err = await res.json();
@@ -124,7 +135,11 @@ async function convertToDeal(data: { prospect_id: string; funnel_id: string; tit
   return res.json();
 }
 
-async function bulkConvert(data: { prospect_ids: string[]; funnel_id: string }): Promise<{ converted: number; skipped: number }> {
+async function bulkConvert(data: { 
+  prospect_ids: string[]; 
+  funnel_id: string;
+  create_companies?: boolean;
+}): Promise<{ converted: number; skipped: number; companies_created?: number }> {
   const res = await fetch(`${API_URL}/api/crm/prospects/bulk-convert`, {
     method: "POST",
     headers: {
