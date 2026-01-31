@@ -160,8 +160,9 @@ export function AgentEditorDialog({ open, onOpenChange, agent, onSaved }: AgentE
         toast.success('Agente criado');
       }
       onSaved();
-    } catch (err) {
-      toast.error('Erro ao salvar agente');
+     } catch (err) {
+       const msg = err instanceof Error && err.message ? err.message : 'Erro ao salvar agente';
+       toast.error(msg);
     } finally {
       setSaving(false);
     }
