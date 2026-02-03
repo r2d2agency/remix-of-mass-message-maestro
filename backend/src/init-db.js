@@ -2428,6 +2428,47 @@ BEGIN
 END $$;
 `;
 
+// Step 29: Conversation Summaries
+const step29ConversationSummaries = `
+-- Conversation summaries (AI-generated)
+CREATE TABLE IF NOT EXISTS conversation_summaries (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    summary TEXT NOT NULL,
+    key_points JSONB DEFAULT '[]',
+    customer_sentiment VARCHAR(20),
+    topics JSONB DEFAULT '[]',
+    action_items JSONB DEFAULT '[]',
+    resolution_status VARCHAR(20),
+    messages_analyzed INTEGER DEFAULT 0,
+    generated_by VARCHAR(50),
+    ai_provider VARCHAR(20),
+    ai_model VARCHAR(50),
+    processing_time_ms INTEGER,
+    triggered_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(conversation_id)
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_conv_summaries_org ON conversation_summaries(organization_id);
+CREATE INDEX IF NOT EXISTS idx_conv_summaries_conv ON conversation_summaries(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_conv_summaries_sentiment ON conversation_summaries(customer_sentiment);
+
+-- Add columns to conversations
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'conversations' AND column_name = 'ai_summary') THEN
+        ALTER TABLE conversations ADD COLUMN ai_summary TEXT;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'conversations' AND column_name = 'ai_sentiment') THEN
+        ALTER TABLE conversations ADD COLUMN ai_sentiment VARCHAR(20);
+    END IF;
+END $$;
+`;
+
 // Migration steps in order of execution
 const migrationSteps = [
   { name: 'Enums', sql: step1Enums, critical: true },
@@ -2459,6 +2500,7 @@ const migrationSteps = [
   { name: 'External Forms', sql: step26ExternalForms, critical: false },
   { name: 'Lead Distribution', sql: step27LeadDistribution, critical: false },
   { name: 'Lead Scoring', sql: step28LeadScoring, critical: false },
+  { name: 'Conversation Summaries', sql: step29ConversationSummaries, critical: false },
 ];
 
 export async function initDatabase() {
