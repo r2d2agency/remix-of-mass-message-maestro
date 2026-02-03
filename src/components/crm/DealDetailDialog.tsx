@@ -343,7 +343,7 @@ export function DealDetailDialog({ deal, open, onOpenChange }: DealDetailDialogP
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col" aria-describedby={undefined}>
+      <DialogContent className="max-w-4xl h-[95vh] max-h-[95vh] flex flex-col" aria-describedby={undefined}>
         <DialogHeader>
           <div className="flex items-start justify-between">
             <div>
@@ -511,7 +511,7 @@ export function DealDetailDialog({ deal, open, onOpenChange }: DealDetailDialogP
             <TabsTrigger value="history">Histórico</TabsTrigger>
           </TabsList>
 
-          <ScrollArea className="flex-1 mt-4 h-[calc(90vh-280px)]">
+          <ScrollArea className="flex-1 mt-4 h-[calc(95vh-260px)]">
             <TabsContent value="details" className="m-0">
               <div className="grid grid-cols-2 gap-4">
                 <Card className="p-4">
