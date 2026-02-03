@@ -23,10 +23,16 @@ import {
   PieChart,
   Pie,
   Cell,
+  AreaChart,
+  Area,
+  ComposedChart,
+  ReferenceLine,
 } from "recharts";
 import {
   useCRMSalesReport,
   useCRMConversionReport,
+  useWinLossAnalysis,
+  usePipelineVelocity,
 } from "@/hooks/use-crm-reports";
 import { useCRMFunnels } from "@/hooks/use-crm";
 import {
@@ -91,6 +97,17 @@ export default function CRMRelatorios() {
     startDate: dateRange?.from?.toISOString().split("T")[0],
     endDate: dateRange?.to?.toISOString().split("T")[0],
   });
+
+  // Trend data
+  const { data: winLossData } = useWinLossAnalysis({
+    startDate: dateRange?.from?.toISOString().split("T")[0],
+    endDate: dateRange?.to?.toISOString().split("T")[0],
+    funnelId: selectedFunnel !== "all" ? selectedFunnel : undefined,
+  });
+
+  const { data: velocityData } = usePipelineVelocity(
+    selectedFunnel !== "all" ? selectedFunnel : undefined
+  );
 
   const handlePreset = (days: number) => {
     setDateRange({
@@ -287,6 +304,10 @@ export default function CRMRelatorios() {
                 <TabsTrigger value="overview" className="gap-2">
                   <BarChart3 className="h-4 w-4" />
                   Visão Geral
+                </TabsTrigger>
+                <TabsTrigger value="trends" className="gap-2">
+                  <TrendingUp className="h-4 w-4" />
+                  Tendências
                 </TabsTrigger>
                 <TabsTrigger value="funnels" className="gap-2">
                   <PieChartIcon className="h-4 w-4" />
@@ -650,6 +671,314 @@ export default function CRMRelatorios() {
                     ) : (
                       <div className="flex items-center justify-center h-[200px] text-muted-foreground">
                         Nenhum vendedor com negociações no período
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* Trends Tab */}
+              <TabsContent value="trends" className="mt-6 space-y-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Win/Loss Trend Chart */}
+                  <Card className="lg:col-span-2">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <TrendingUp className="h-5 w-5 text-green-500" />
+                        Tendência de Ganhos vs Perdas
+                      </CardTitle>
+                      <CardDescription>
+                        Evolução mensal do desempenho de vendas
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {winLossData?.trend && winLossData.trend.length > 0 ? (
+                        <ResponsiveContainer width="100%" height={350}>
+                          <ComposedChart data={winLossData.trend}>
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                            <XAxis
+                              dataKey="month"
+                              tick={{ fontSize: 12 }}
+                              tickFormatter={(v) => {
+                                const [year, month] = v.split("-");
+                                const months = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+                                return `${months[parseInt(month) - 1]}/${year.slice(2)}`;
+                              }}
+                            />
+                            <YAxis yAxisId="left" tick={{ fontSize: 12 }} />
+                            <YAxis
+                              yAxisId="right"
+                              orientation="right"
+                              tick={{ fontSize: 12 }}
+                              tickFormatter={(v) => formatCurrency(v)}
+                            />
+                            <Tooltip
+                              contentStyle={{
+                                backgroundColor: "hsl(var(--card))",
+                                border: "1px solid hsl(var(--border))",
+                                borderRadius: "8px",
+                              }}
+                              formatter={(value: number, name: string) => {
+                                if (name.includes("Valor")) return formatCurrency(value);
+                                return value;
+                              }}
+                            />
+                            <Legend />
+                            <Bar
+                              yAxisId="left"
+                              dataKey="won_count"
+                              name="Negociações Ganhas"
+                              fill={STATUS_COLORS.won}
+                              radius={[4, 4, 0, 0]}
+                            />
+                            <Bar
+                              yAxisId="left"
+                              dataKey="lost_count"
+                              name="Negociações Perdidas"
+                              fill={STATUS_COLORS.lost}
+                              radius={[4, 4, 0, 0]}
+                            />
+                            <Line
+                              yAxisId="right"
+                              type="monotone"
+                              dataKey="won_value"
+                              name="Valor Ganho"
+                              stroke="#10b981"
+                              strokeWidth={3}
+                              dot={{ r: 5, fill: "#10b981" }}
+                            />
+                          </ComposedChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <div className="flex items-center justify-center h-[350px] text-muted-foreground">
+                          Nenhum dado de tendência disponível
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Win Rate Trend */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Taxa de Conversão ao Longo do Tempo</CardTitle>
+                      <CardDescription>Evolução da taxa de fechamento</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {winLossData?.trend && winLossData.trend.length > 0 ? (
+                        <ResponsiveContainer width="100%" height={250}>
+                          <AreaChart
+                            data={winLossData.trend.map((t) => ({
+                              ...t,
+                              winRate:
+                                t.won_count + t.lost_count > 0
+                                  ? ((t.won_count / (t.won_count + t.lost_count)) * 100).toFixed(1)
+                                  : 0,
+                            }))}
+                          >
+                            <defs>
+                              <linearGradient id="winRateGradient" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
+                                <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                            <XAxis
+                              dataKey="month"
+                              tick={{ fontSize: 11 }}
+                              tickFormatter={(v) => {
+                                const [, month] = v.split("-");
+                                const months = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"];
+                                return months[parseInt(month) - 1];
+                              }}
+                            />
+                            <YAxis tick={{ fontSize: 11 }} domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
+                            <Tooltip
+                              contentStyle={{
+                                backgroundColor: "hsl(var(--card))",
+                                border: "1px solid hsl(var(--border))",
+                                borderRadius: "8px",
+                              }}
+                              formatter={(value: number) => [`${value}%`, "Taxa de Conversão"]}
+                            />
+                            <ReferenceLine y={50} stroke="#f59e0b" strokeDasharray="5 5" label={{ value: "Meta 50%", fontSize: 10, fill: "#f59e0b" }} />
+                            <Area
+                              type="monotone"
+                              dataKey="winRate"
+                              stroke="#10b981"
+                              strokeWidth={2}
+                              fillOpacity={1}
+                              fill="url(#winRateGradient)"
+                            />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <div className="flex items-center justify-center h-[250px] text-muted-foreground">
+                          Nenhum dado disponível
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Pipeline Velocity */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Activity className="h-5 w-5 text-primary" />
+                        Velocidade do Pipeline
+                      </CardTitle>
+                      <CardDescription>Receita potencial por dia</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {velocityData ? (
+                        <div className="space-y-6">
+                          <div className="text-center">
+                            <div className="text-4xl font-bold text-primary">
+                              {formatCurrency(velocityData.velocity || 0)}
+                            </div>
+                            <p className="text-sm text-muted-foreground">por dia</p>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="text-center p-3 bg-muted/50 rounded-lg">
+                              <div className="text-lg font-semibold">{velocityData.metrics.open_deals}</div>
+                              <p className="text-xs text-muted-foreground">Deals Abertos</p>
+                            </div>
+                            <div className="text-center p-3 bg-muted/50 rounded-lg">
+                              <div className="text-lg font-semibold">{velocityData.metrics.won_deals}</div>
+                              <p className="text-xs text-muted-foreground">Deals Ganhos</p>
+                            </div>
+                            <div className="text-center p-3 bg-muted/50 rounded-lg">
+                              <div className="text-lg font-semibold">{formatCurrency(velocityData.metrics.avg_deal_value)}</div>
+                              <p className="text-xs text-muted-foreground">Ticket Médio</p>
+                            </div>
+                            <div className="text-center p-3 bg-muted/50 rounded-lg">
+                              <div className="text-lg font-semibold">{velocityData.metrics.avg_cycle_days}d</div>
+                              <p className="text-xs text-muted-foreground">Ciclo Médio</p>
+                            </div>
+                          </div>
+
+                          <div className="text-center p-4 bg-green-500/10 rounded-lg border border-green-500/20">
+                            <div className="text-2xl font-bold text-green-600">{velocityData.metrics.win_rate}%</div>
+                            <p className="text-sm text-muted-foreground">Taxa de Conversão</p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center h-[250px] text-muted-foreground">
+                          Calculando velocidade...
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Stage Time Analysis */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Tempo Médio por Etapa</CardTitle>
+                    <CardDescription>
+                      Quanto tempo as negociações permanecem em cada etapa do funil
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {velocityData?.stage_time && velocityData.stage_time.length > 0 ? (
+                      <ResponsiveContainer width="100%" height={300}>
+                        <BarChart data={velocityData.stage_time} layout="vertical">
+                          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                          <XAxis type="number" tick={{ fontSize: 12 }} tickFormatter={(v) => `${v}d`} />
+                          <YAxis
+                            type="category"
+                            dataKey="stage_name"
+                            tick={{ fontSize: 12 }}
+                            width={120}
+                          />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: "hsl(var(--card))",
+                              border: "1px solid hsl(var(--border))",
+                              borderRadius: "8px",
+                            }}
+                            formatter={(value: number) => [`${value} dias`, "Tempo médio"]}
+                          />
+                          <Bar
+                            dataKey="avg_days_in_stage"
+                            fill="hsl(var(--primary))"
+                            radius={[0, 4, 4, 0]}
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                        Nenhum dado de tempo por etapa disponível
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Loss Reasons */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <TrendingDown className="h-5 w-5 text-red-500" />
+                      Motivos de Perda
+                    </CardTitle>
+                    <CardDescription>
+                      Análise dos principais motivos de negociações perdidas
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {winLossData?.loss_reasons && winLossData.loss_reasons.length > 0 ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <ResponsiveContainer width="100%" height={250}>
+                          <PieChart>
+                            <Pie
+                              data={winLossData.loss_reasons}
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={50}
+                              outerRadius={80}
+                              paddingAngle={2}
+                              dataKey="count"
+                              nameKey="reason"
+                            >
+                              {winLossData.loss_reasons.map((_, index) => (
+                                <Cell
+                                  key={`cell-${index}`}
+                                  fill={`hsl(${(index * 45) % 360}, 70%, 50%)`}
+                                />
+                              ))}
+                            </Pie>
+                            <Tooltip
+                              contentStyle={{
+                                backgroundColor: "hsl(var(--card))",
+                                border: "1px solid hsl(var(--border))",
+                                borderRadius: "8px",
+                              }}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
+                        <div className="space-y-3">
+                          {winLossData.loss_reasons.map((reason, index) => (
+                            <div key={reason.reason} className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <div
+                                  className="w-3 h-3 rounded-full"
+                                  style={{ backgroundColor: `hsl(${(index * 45) % 360}, 70%, 50%)` }}
+                                />
+                                <span className="text-sm">{reason.reason || "Não especificado"}</span>
+                              </div>
+                              <div className="text-right">
+                                <span className="font-medium">{reason.count}</span>
+                                <span className="text-xs text-muted-foreground ml-2">
+                                  ({formatCurrency(reason.lost_value)})
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-center h-[250px] text-muted-foreground">
+                        Nenhum motivo de perda registrado
                       </div>
                     )}
                   </CardContent>
