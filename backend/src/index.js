@@ -32,6 +32,7 @@ import externalFormsRoutes from './routes/external-forms.js';
 import leadDistributionRoutes from './routes/lead-distribution.js';
 import leadWebhooksRoutes from './routes/lead-webhooks.js';
 import leadScoringRoutes from './routes/lead-scoring.js';
+import conversationSummaryRoutes from './routes/conversation-summary.js';
 import { initDatabase } from './init-db.js';
 import { executeNotifications } from './scheduler.js';
 import { executeCampaignMessages } from './campaign-scheduler.js';
@@ -177,6 +178,7 @@ app.use('/api/external-forms', externalFormsRoutes);
 app.use('/api/lead-distribution', leadDistributionRoutes);
 app.use('/api/lead-webhooks', leadWebhooksRoutes);
 app.use('/api/lead-scoring', leadScoringRoutes);
+app.use('/api/conversation-summary', conversationSummaryRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

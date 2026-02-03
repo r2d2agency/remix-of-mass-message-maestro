@@ -83,6 +83,7 @@ import {
   Bot,
   Building2,
   Briefcase,
+  Sparkles,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -98,6 +99,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { QuickRepliesPanel } from "./QuickRepliesPanel";
+import { ConversationSummaryPanel, SummaryBadge } from "./ConversationSummaryPanel";
+import { useFinishWithSummary, useGenerateSummary } from "@/hooks/use-conversation-summary";
 import { NotesPanel } from "./NotesPanel";
 import { AudioWaveform } from "./AudioWaveform";
 import { AudioPlayer } from "./AudioPlayer";
@@ -230,6 +233,7 @@ export function ChatArea({
   const [showDealDialog, setShowDealDialog] = useState(false);
   const [showDealDetailDialog, setShowDealDetailDialog] = useState(false);
   const [selectedDeal, setSelectedDeal] = useState<CRMDeal | null>(null);
+  const [showSummaryPanel, setShowSummaryPanel] = useState(false);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -247,6 +251,10 @@ export function ChatArea({
   const dragCounterRef = useRef(0);
   const { user, modulesEnabled } = useAuth();
   const { getNotes, getTypingStatus, getScheduledMessages, scheduleMessage, cancelScheduledMessage } = useChat();
+  
+  // AI Summary hooks
+  const finishWithSummary = useFinishWithSummary();
+  const generateSummary = useGenerateSummary();
   
   // Fetch CRM deals for this contact
   const { data: contactDeals, isLoading: loadingDeals } = useCRMDealsByPhone(
@@ -1275,10 +1283,24 @@ export function ChatArea({
                     </DropdownMenuItem>
                   )}
                   {!isViewOnly && onFinishConversation && (conversation.attendance_status === 'attending' || conversation.attendance_status === 'waiting') && (
-                    <DropdownMenuItem onClick={onFinishConversation} className="text-green-600">
-                      <CheckCheck className="h-4 w-4 mr-2" />
-                      Finalizar atendimento
-                    </DropdownMenuItem>
+                    <>
+                      <DropdownMenuItem onClick={onFinishConversation} className="text-green-600">
+                        <CheckCheck className="h-4 w-4 mr-2" />
+                        Finalizar atendimento
+                      </DropdownMenuItem>
+                      <DropdownMenuItem 
+                        onClick={() => finishWithSummary.mutate(conversation.id)}
+                        disabled={finishWithSummary.isPending}
+                        className="text-primary"
+                      >
+                        {finishWithSummary.isPending ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <Sparkles className="h-4 w-4 mr-2" />
+                        )}
+                        Finalizar + Resumo IA
+                      </DropdownMenuItem>
+                    </>
                   )}
                   {!isViewOnly && onReopenConversation && conversation.attendance_status === 'finished' && (
                     <DropdownMenuItem onClick={onReopenConversation} className="text-blue-600">
@@ -1305,6 +1327,31 @@ export function ChatArea({
                   </Badge>
                 )}
               </DropdownMenuItem>
+
+              {/* AI Summary */}
+              <DropdownMenuItem onClick={() => setShowSummaryPanel(!showSummaryPanel)}>
+                <Sparkles className="h-4 w-4 mr-2" />
+                Resumo IA
+                {(conversation as any).ai_sentiment && (
+                  <SummaryBadge sentiment={(conversation as any).ai_sentiment} className="ml-auto" />
+                )}
+              </DropdownMenuItem>
+              
+              {/* Generate Summary if finished and no summary */}
+              {conversation.attendance_status === 'finished' && !(conversation as any).ai_summary && (
+                <DropdownMenuItem 
+                  onClick={() => generateSummary.mutate(conversation.id)}
+                  disabled={generateSummary.isPending}
+                  className="text-primary"
+                >
+                  {generateSummary.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-4 w-4 mr-2" />
+                  )}
+                  Gerar resumo IA
+                </DropdownMenuItem>
+              )}
 
               {/* CRM deals inside the 3-dots menu as an alternative entry point */}
               {!conversation.is_group && openDeals.length > 0 && (
@@ -2483,6 +2530,24 @@ export function ChatArea({
           conversationId={conversation.id}
           onClose={() => setShowNotes(false)}
         />
+      )}
+
+      {/* AI Summary Panel */}
+      {showSummaryPanel && conversation && (
+        <div className="fixed inset-y-0 right-0 w-80 bg-background border-l shadow-lg z-50 flex flex-col">
+          <div className="flex items-center justify-between p-4 border-b">
+            <h3 className="font-semibold flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-primary" />
+              Resumo IA
+            </h3>
+            <Button variant="ghost" size="icon" onClick={() => setShowSummaryPanel(false)}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="flex-1 overflow-auto p-4">
+            <ConversationSummaryPanel conversationId={conversation.id} />
+          </div>
+        </div>
       )}
 
       {/* Deal Link Dialog */}
