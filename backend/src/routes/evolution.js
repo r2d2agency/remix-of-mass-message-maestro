@@ -123,11 +123,23 @@ async function downloadAndSaveMedia(connection, messageObj, messageType) {
     else if (mimetype.includes('audio/ogg')) ext = '.ogg';
     else if (mimetype.includes('audio/mpeg') || mimetype.includes('audio/mp3')) ext = '.mp3';
     else if (mimetype.includes('audio/mp4') || mimetype.includes('audio/m4a')) ext = '.m4a';
+    else if (mimetype.includes('audio/wav')) ext = '.wav';
     else if (mimetype.includes('audio/')) ext = '.ogg';
     else if (mimetype.includes('video/mp4')) ext = '.mp4';
     else if (mimetype.includes('video/webm')) ext = '.webm';
+    else if (mimetype.includes('video/quicktime')) ext = '.mov';
     else if (mimetype.includes('video/')) ext = '.mp4';
     else if (mimetype.includes('application/pdf')) ext = '.pdf';
+    else if (mimetype.includes('spreadsheetml.sheet')) ext = '.xlsx';
+    else if (mimetype.includes('ms-excel')) ext = '.xls';
+    else if (mimetype.includes('wordprocessingml.document')) ext = '.docx';
+    else if (mimetype.includes('msword')) ext = '.doc';
+    else if (mimetype.includes('presentationml.presentation')) ext = '.pptx';
+    else if (mimetype.includes('ms-powerpoint')) ext = '.ppt';
+    else if (mimetype.includes('text/plain')) ext = '.txt';
+    else if (mimetype.includes('text/csv') || mimetype.includes('application/csv')) ext = '.csv';
+    else if (mimetype.includes('application/zip') || mimetype.includes('x-zip')) ext = '.zip';
+    else if (mimetype.includes('x-rar')) ext = '.rar';
 
     const filename = `${Date.now()}-${crypto.randomBytes(8).toString('hex')}${ext}`;
     const filePath = path.join(UPLOADS_DIR, filename);

@@ -130,21 +130,34 @@ app.use('/uploads', (req, res, next) => {
   setHeaders: (res, filePath) => {
     // Set correct MIME types for audio/video
     const ext = path.extname(filePath).toLowerCase();
-    if (ext === '.ogg') {
-      res.setHeader('Content-Type', 'audio/ogg');
-    } else if (ext === '.mp3') {
-      res.setHeader('Content-Type', 'audio/mpeg');
-    } else if (ext === '.m4a') {
-      res.setHeader('Content-Type', 'audio/mp4');
-    } else if (ext === '.wav') {
-      res.setHeader('Content-Type', 'audio/wav');
-    } else if (ext === '.aac') {
-      res.setHeader('Content-Type', 'audio/aac');
-    } else if (ext === '.mp4') {
-      res.setHeader('Content-Type', 'video/mp4');
-    } else if (ext === '.webm') {
-      // Many voice notes are stored as .webm; prefer audio/webm for broad compatibility
-      res.setHeader('Content-Type', 'audio/webm');
+    const mimeMap = {
+      '.ogg': 'audio/ogg',
+      '.mp3': 'audio/mpeg',
+      '.m4a': 'audio/mp4',
+      '.wav': 'audio/wav',
+      '.aac': 'audio/aac',
+      '.mp4': 'video/mp4',
+      '.webm': 'audio/webm',
+      '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      '.xls': 'application/vnd.ms-excel',
+      '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      '.doc': 'application/msword',
+      '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      '.ppt': 'application/vnd.ms-powerpoint',
+      '.pdf': 'application/pdf',
+      '.csv': 'text/csv',
+      '.txt': 'text/plain',
+      '.zip': 'application/zip',
+      '.rar': 'application/x-rar-compressed',
+    };
+    if (mimeMap[ext]) {
+      res.setHeader('Content-Type', mimeMap[ext]);
+    }
+    // Force download with proper filename for document types
+    const docExts = ['.xlsx', '.xls', '.docx', '.doc', '.pptx', '.ppt', '.csv', '.txt', '.zip', '.rar', '.pdf'];
+    if (docExts.includes(ext)) {
+      const basename = path.basename(filePath);
+      res.setHeader('Content-Disposition', `attachment; filename="${basename}"`);
     }
   }
 }));
