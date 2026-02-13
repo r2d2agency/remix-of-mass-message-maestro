@@ -331,7 +331,7 @@ function withTimeout(promise, ms, label = 'timeout') {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(t));
 }
 
-function sniffExtFromBuffer(buf) {
+function sniffExtFromBuffer(buf, hintedMime) {
   if (!buf || buf.length < 12) return null;
 
   // JPEG
@@ -351,12 +351,22 @@ function sniffExtFromBuffer(buf) {
   if (buf[0] === 0x4f && buf[1] === 0x67 && buf[2] === 0x67 && buf[3] === 0x53) return 'ogg';
   // MP4/QuickTime: ....ftyp
   if (buf[4] === 0x66 && buf[5] === 0x74 && buf[6] === 0x79 && buf[7] === 0x70) return 'mp4';
+  // ZIP-based (xlsx, docx, pptx, zip) — PK header
+  if (buf[0] === 0x50 && buf[1] === 0x4b && buf[2] === 0x03 && buf[3] === 0x04) {
+    const hm = String(hintedMime || '').toLowerCase();
+    if (hm.includes('spreadsheet') || hm.includes('excel') || hm.includes('xlsx')) return 'xlsx';
+    if (hm.includes('wordprocessing') || hm.includes('msword') || hm.includes('docx')) return 'docx';
+    if (hm.includes('presentation') || hm.includes('powerpoint') || hm.includes('pptx')) return 'pptx';
+    return 'zip';
+  }
+  // RAR
+  if (buf[0] === 0x52 && buf[1] === 0x61 && buf[2] === 0x72 && buf[3] === 0x21) return 'rar';
 
   return null;
 }
 
 async function writeBufferToUploads(buf, messageType, hintedMime) {
-  const ext = extFromMime(hintedMime) || sniffExtFromBuffer(buf) || defaultExtByType(messageType);
+  const ext = extFromMime(hintedMime) || sniffExtFromBuffer(buf, hintedMime) || defaultExtByType(messageType);
   const filename = `${Date.now()}-${crypto.randomBytes(8).toString('hex')}.${ext}`;
   const filePath = path.join(UPLOADS_DIR, filename);
   await fs.promises.writeFile(filePath, buf);
@@ -1764,10 +1774,31 @@ function extractMessageContent(payload) {
   if (msgContent.documentMessage) {
     messageType = 'document';
     mediaMimetype = pickMime(msgContent.documentMessage) || payload.mediaMimetype || payload.mimetype || null;
+    const docFileName = msgContent.documentMessage.fileName || payload.fileName || '';
+    // If mimetype is generic/missing, try to infer from fileName extension
+    if ((!mediaMimetype || mediaMimetype === 'application/octet-stream') && docFileName) {
+      const fileExt = docFileName.split('.').pop()?.toLowerCase();
+      const extToMime = {
+        xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        xls: 'application/vnd.ms-excel',
+        docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        doc: 'application/msword',
+        pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        ppt: 'application/vnd.ms-powerpoint',
+        pdf: 'application/pdf',
+        csv: 'text/csv',
+        txt: 'text/plain',
+        zip: 'application/zip',
+        rar: 'application/x-rar-compressed',
+      };
+      if (fileExt && extToMime[fileExt]) {
+        mediaMimetype = extToMime[fileExt];
+      }
+    }
     mediaUrl =
       pickFirstString(msgContent.documentMessage, ['url', 'fileUrl', 'mediaUrl', 'link', 'downloadUrl', 'base64', 'data']) ||
       pickFirstString(payload, ['mediaUrl', 'url', 'fileUrl', 'downloadUrl', 'base64', 'data']);
-    content = msgContent.documentMessage.fileName || '[Documento]';
+    content = docFileName || '[Documento]';
     waMediaKey = extractMediaKey(msgContent.documentMessage) || extractMediaKey(payload);
     return { messageType, content, mediaUrl, mediaMimetype, waMediaKey };
   }
@@ -1820,8 +1851,29 @@ function extractMessageContent(payload) {
   if (payload.document || payload.documentMessage) {
     messageType = 'document';
     mediaMimetype = mediaMimetype || payload.documentMessage?.mimetype || payload.mimetype || null;
+    const legacyDocFileName = payload.fileName || payload.documentMessage?.fileName || '';
+    // Infer mimetype from fileName if generic
+    if ((!mediaMimetype || mediaMimetype === 'application/octet-stream') && legacyDocFileName) {
+      const fileExt = legacyDocFileName.split('.').pop()?.toLowerCase();
+      const extToMime = {
+        xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        xls: 'application/vnd.ms-excel',
+        docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        doc: 'application/msword',
+        pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        ppt: 'application/vnd.ms-powerpoint',
+        pdf: 'application/pdf',
+        csv: 'text/csv',
+        txt: 'text/plain',
+        zip: 'application/zip',
+        rar: 'application/x-rar-compressed',
+      };
+      if (fileExt && extToMime[fileExt]) {
+        mediaMimetype = extToMime[fileExt];
+      }
+    }
     mediaUrl = payload.document || payload.documentMessage?.url || payload.mediaUrl || payload.url || null;
-    content = payload.fileName || payload.documentMessage?.fileName || '[Documento]';
+    content = legacyDocFileName || '[Documento]';
     waMediaKey = extractMediaKey(payload.documentMessage) || extractMediaKey(payload);
   }
 
