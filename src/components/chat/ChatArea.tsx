@@ -1731,6 +1731,7 @@ export function ChatArea({
                 {msg.message_type === 'document' && mediaUrl && (
                   <a
                     href={mediaUrl}
+                    download={getDocumentDisplayName(msg, mediaUrl)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-2 text-sm underline mb-2 min-w-0"
