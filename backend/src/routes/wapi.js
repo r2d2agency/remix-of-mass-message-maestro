@@ -92,11 +92,28 @@ function extFromMime(mime) {
     'audio/mpeg': 'mp3',
     'audio/mp3': 'mp3',
     'audio/mp4': 'm4a',
+    'audio/m4a': 'm4a',
+    'audio/x-m4a': 'm4a',
+    'audio/aac': 'aac',
     'audio/wav': 'wav',
+    'audio/x-wav': 'wav',
     'audio/webm': 'webm',
     'video/mp4': 'mp4',
     'video/webm': 'webm',
+    'video/quicktime': 'mov',
     'application/pdf': 'pdf',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+    'application/vnd.ms-excel': 'xls',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+    'application/msword': 'doc',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+    'application/vnd.ms-powerpoint': 'ppt',
+    'text/plain': 'txt',
+    'text/csv': 'csv',
+    'application/csv': 'csv',
+    'application/zip': 'zip',
+    'application/x-zip-compressed': 'zip',
+    'application/x-rar-compressed': 'rar',
   };
   return map[m] || null;
 }
@@ -211,6 +228,17 @@ function downloadToUploads(url, messageType, hintedMime, redirectCount = 0) {
           if (b[0] === 0x4f && b[1] === 0x67 && b[2] === 0x67 && b[3] === 0x53) return 'ogg';
           // MP4/QuickTime: ....ftyp
           if (b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) return 'mp4';
+          // ZIP-based (xlsx, docx, pptx, zip) — PK header
+          if (b[0] === 0x50 && b[1] === 0x4b && b[2] === 0x03 && b[3] === 0x04) {
+            // Try to determine the specific Office format from hintedMime
+            const hm = String(hintedMime || mime || '').toLowerCase();
+            if (hm.includes('spreadsheet') || hm.includes('excel') || hm.includes('xlsx')) return 'xlsx';
+            if (hm.includes('wordprocessing') || hm.includes('msword') || hm.includes('docx')) return 'docx';
+            if (hm.includes('presentation') || hm.includes('powerpoint') || hm.includes('pptx')) return 'pptx';
+            return 'zip';
+          }
+          // RAR
+          if (b[0] === 0x52 && b[1] === 0x61 && b[2] === 0x72 && b[3] === 0x21) return 'rar';
 
           return null;
         };
