@@ -724,11 +724,21 @@ router.post('/:connectionId/test', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'Número de telefone é obrigatório' });
     }
 
-    // Get connection
-    const connResult = await query(
+    // Get connection (check user_id OR organization)
+    let connResult = await query(
       'SELECT * FROM connections WHERE id = $1 AND user_id = $2',
       [connectionId, req.userId]
     );
+
+    if (connResult.rows.length === 0) {
+      // Try via organization
+      connResult = await query(
+        `SELECT c.* FROM connections c
+         JOIN organization_members om ON om.organization_id = c.organization_id
+         WHERE c.id = $1 AND om.user_id = $2`,
+        [connectionId, req.userId]
+      );
+    }
 
     if (connResult.rows.length === 0) {
       return res.status(404).json({ error: 'Conexão não encontrada' });
@@ -736,8 +746,9 @@ router.post('/:connectionId/test', authenticate, async (req, res) => {
 
     const connection = connResult.rows[0];
 
-    // Check if connection is active
-    if (connection.status !== 'connected') {
+    // For W-API, skip strict status check (credentials are enough)
+    const provider = whatsappProvider.detectProvider(connection);
+    if (provider !== 'wapi' && connection.status !== 'connected') {
       return res.status(400).json({ error: 'Conexão não está ativa. Conecte primeiro.' });
     }
 
