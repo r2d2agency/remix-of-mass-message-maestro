@@ -752,8 +752,6 @@ router.post('/:connectionId/test', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'Conexão não está ativa. Conecte primeiro.' });
     }
 
-    // Detect provider to use correct method
-    const provider = whatsappProvider.detectProvider(connection);
     console.log(`[Test Message] Provider: ${provider}, Connection: ${connectionId}, Phone: ${phone}`);
 
     // Format phone number (remove non-digits)
