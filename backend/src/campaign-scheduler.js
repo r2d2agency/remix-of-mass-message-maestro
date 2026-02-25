@@ -340,16 +340,33 @@ export async function executeCampaignMessages() {
 
           // Save sent messages to chat_messages so they appear in the chat interface
           try {
-            const remoteJid = msg.phone.includes('@') ? msg.phone : `${msg.phone}@s.whatsapp.net`;
+            // Clean phone number (digits only)
+            const cleanPhone = msg.phone.replace(/\D/g, '');
             
-            // Find or create conversation
+            // Try to find existing conversation using multiple JID formats
+            // W-API may use @lid, Evolution uses @s.whatsapp.net
             let convResult = await query(
-              `SELECT id FROM conversations WHERE connection_id = $1 AND remote_jid = $2`,
-              [msg.connection_id, remoteJid]
+              `SELECT id, remote_jid FROM conversations 
+               WHERE connection_id = $1 
+                 AND (
+                   remote_jid = $2 
+                   OR remote_jid = $3 
+                   OR remote_jid LIKE $4
+                 )
+               ORDER BY last_message_at DESC NULLS LAST
+               LIMIT 1`,
+              [
+                msg.connection_id, 
+                `${cleanPhone}@s.whatsapp.net`,
+                `${cleanPhone}@lid`,
+                `${cleanPhone}@%`,
+              ]
             );
             
             let conversationId;
             if (convResult.rows.length === 0) {
+              // Create new conversation with standard JID format
+              const remoteJid = `${cleanPhone}@s.whatsapp.net`;
               const newConv = await query(
                 `INSERT INTO conversations (connection_id, remote_jid, contact_name, contact_phone)
                  VALUES ($1, $2, $3, $4)
@@ -362,9 +379,10 @@ export async function executeCampaignMessages() {
             }
 
             // Insert each sent item as a chat message
-            for (const itemResult of result.results) {
+            let insertedCount = 0;
+            for (const itemResult of result.results || []) {
               if (!itemResult.success) continue;
-              const item = itemResult.item;
+              const item = itemResult.item || {};
               const processedContent = replaceVariables(item.content || item.caption || '', contact);
               const mediaUrl = item.mediaUrl || item.media_url || null;
 
@@ -380,15 +398,19 @@ export async function executeCampaignMessages() {
                   mediaUrl,
                 ]
               );
+              insertedCount++;
             }
 
             // Update conversation last_message_at
-            await query(
-              `UPDATE conversations SET last_message_at = NOW(), updated_at = NOW() WHERE id = $1`,
-              [conversationId]
-            );
+            if (insertedCount > 0) {
+              await query(
+                `UPDATE conversations SET last_message_at = NOW(), updated_at = NOW() WHERE id = $1`,
+                [conversationId]
+              );
+              console.log(`  💬 [${msg.phone}] ${insertedCount} message(s) saved to chat`);
+            }
           } catch (chatErr) {
-            console.error(`  ⚠ Failed to save campaign message to chat_messages:`, chatErr.message);
+            console.error(`  ⚠ Failed to save campaign message to chat_messages:`, chatErr.message, chatErr.stack);
           }
         } else {
           const translatedError = translateError(result.error);
