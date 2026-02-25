@@ -55,11 +55,17 @@ function validateConnectionForProvider(connection) {
 
 async function ensureConnected(connection) {
   const statusResult = await whatsappProvider.checkStatus(connection);
-  const newStatus = statusResult?.status || 'disconnected';
-  const phoneNumber = statusResult?.phoneNumber || null;
+  const provider = whatsappProvider.detectProvider(connection);
 
-  // Best-effort: keep DB in sync
-  if (connection?.id) {
+  const checkedStatus = statusResult?.status || 'disconnected';
+  const isTransientWapiError =
+    provider === 'wapi' && (statusResult?.transient === true || checkedStatus === 'unknown');
+
+  const newStatus = isTransientWapiError ? (connection?.status || 'disconnected') : checkedStatus;
+  const phoneNumber = statusResult?.phoneNumber || (isTransientWapiError ? connection?.phone_number || null : null);
+
+  // Best-effort: keep DB in sync (skip transient W-API failures)
+  if (connection?.id && !isTransientWapiError) {
     await query(
       'UPDATE connections SET status = $1, phone_number = COALESCE($2, phone_number), updated_at = NOW() WHERE id = $3',
       [newStatus, phoneNumber, connection.id]

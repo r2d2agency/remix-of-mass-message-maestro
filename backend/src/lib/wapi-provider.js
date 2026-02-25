@@ -237,12 +237,20 @@ export async function checkStatus(instanceId, token) {
         // ignore
       }
 
+      const isTransient = response.status >= 500 || response.status === 429 || response.status === 408;
+
       logWarn('wapi.status_check_non_ok', {
         instance_id: instanceId,
         status_code: response.status,
         error: errMsg,
+        transient: isTransient,
       });
-      return { status: 'disconnected', error: errMsg };
+      return {
+        status: isTransient ? 'unknown' : 'disconnected',
+        error: errMsg,
+        transient: isTransient,
+        statusCode: response.status,
+      };
     }
 
     let data;
@@ -254,7 +262,7 @@ export async function checkStatus(instanceId, token) {
         status_code: response.status,
         body_preview: String(responseText || '').slice(0, 500),
       });
-      return { status: 'disconnected', error: 'Invalid JSON response' };
+      return { status: 'unknown', error: 'Invalid JSON response', transient: true, statusCode: response.status };
     }
 
     // Remove verbose logging for successful parses
@@ -311,7 +319,7 @@ export async function checkStatus(instanceId, token) {
       instance_id: instanceId,
       duration_ms: Date.now() - startedAt,
     });
-    return { status: 'disconnected', error: error.message };
+    return { status: 'unknown', error: error.message, transient: true };
   }
 }
 
