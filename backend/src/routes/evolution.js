@@ -549,12 +549,15 @@ router.get('/:connectionId/status', authenticate, async (req, res) => {
 
     // Use unified provider to check status
     const statusResult = await whatsappProvider.checkStatus(connection);
-    
-    const newStatus = statusResult.status || 'disconnected';
-    const phoneNumber = statusResult.phoneNumber || null;
+    const checkedStatus = statusResult?.status || 'disconnected';
+    const isTransientWapiError =
+      provider === 'wapi' && (statusResult?.transient === true || checkedStatus === 'unknown');
 
-    // Update status in database if changed
-    if (connection.status !== newStatus || connection.phone_number !== phoneNumber) {
+    const newStatus = isTransientWapiError ? (connection.status || 'disconnected') : checkedStatus;
+    const phoneNumber = statusResult?.phoneNumber || (isTransientWapiError ? connection.phone_number || null : null);
+
+    // Update status in database if changed (skip transient W-API failures)
+    if (!isTransientWapiError && (connection.status !== newStatus || connection.phone_number !== phoneNumber)) {
       await query(
         'UPDATE connections SET status = $1, phone_number = $2, updated_at = NOW() WHERE id = $3',
         [newStatus, phoneNumber, connectionId]
