@@ -1655,20 +1655,70 @@ async function handleStatusUpdate(connection, payload) {
   }
 }
 
+// Debounce map: connectionId -> timeout
+const disconnectDebounceMap = new Map();
+const DISCONNECT_DEBOUNCE_MS = 15000; // 15 seconds - wait before marking disconnected
+
 /**
  * Handle connection status update
+ * For disconnect events, we debounce and verify real status to avoid transient disconnections
  */
 async function handleConnectionUpdate(connection, payload) {
   try {
     const connected = payload.connected === true || payload.status === 'connected' || payload.state === 'open';
     const phoneNumber = payload.phoneNumber || payload.phone || payload.wid?.split('@')[0];
 
-    await query(
-      `UPDATE connections SET status = $1, phone_number = COALESCE($2, phone_number), updated_at = NOW() WHERE id = $3`,
-      [connected ? 'connected' : 'disconnected', phoneNumber, connection.id]
-    );
+    if (connected) {
+      // Connected: clear any pending disconnect debounce and update immediately
+      if (disconnectDebounceMap.has(connection.id)) {
+        clearTimeout(disconnectDebounceMap.get(connection.id));
+        disconnectDebounceMap.delete(connection.id);
+        console.log('[W-API] Cancelled pending disconnect (reconnected) for connection:', connection.id);
+      }
 
-    console.log('[W-API] Connection status updated:', connected ? 'connected' : 'disconnected');
+      await query(
+        `UPDATE connections SET status = 'connected', phone_number = COALESCE($1, phone_number), updated_at = NOW() WHERE id = $2`,
+        [phoneNumber, connection.id]
+      );
+      console.log('[W-API] Connection status updated: connected');
+    } else {
+      // Disconnected: debounce - wait and then verify real status before marking
+      console.log('[W-API] Received disconnect event for connection:', connection.id, '- debouncing for', DISCONNECT_DEBOUNCE_MS, 'ms');
+      
+      // Clear previous debounce if any
+      if (disconnectDebounceMap.has(connection.id)) {
+        clearTimeout(disconnectDebounceMap.get(connection.id));
+      }
+
+      const timeout = setTimeout(async () => {
+        disconnectDebounceMap.delete(connection.id);
+        try {
+          // Verify real status from W-API before marking as disconnected
+          const { checkStatus } = await import('../lib/wapi-provider.js');
+          const realStatus = await checkStatus(connection.instance_id, connection.wapi_token);
+          
+          if (realStatus.status === 'connected') {
+            console.log('[W-API] Debounced disconnect cancelled: instance is actually connected for connection:', connection.id);
+            // Update as connected since it reconnected
+            await query(
+              `UPDATE connections SET status = 'connected', phone_number = COALESCE($1, phone_number), updated_at = NOW() WHERE id = $2`,
+              [realStatus.phoneNumber || null, connection.id]
+            );
+          } else {
+            console.log('[W-API] Confirmed disconnect after debounce for connection:', connection.id);
+            await query(
+              `UPDATE connections SET status = 'disconnected', updated_at = NOW() WHERE id = $1`,
+              [connection.id]
+            );
+          }
+        } catch (err) {
+          console.error('[W-API] Error verifying status after disconnect debounce:', err.message);
+          // Don't mark as disconnected on error - keep current status
+        }
+      }, DISCONNECT_DEBOUNCE_MS);
+
+      disconnectDebounceMap.set(connection.id, timeout);
+    }
   } catch (error) {
     console.error('[W-API] Error handling connection update:', error);
   }
