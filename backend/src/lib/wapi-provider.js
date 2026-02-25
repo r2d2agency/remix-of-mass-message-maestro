@@ -452,17 +452,24 @@ export async function sendText(instanceId, token, phone, message) {
   const cleanPhone = isGroup ? phone : phone.replace(/\D/g, '');
   const at = new Date().toISOString();
 
+  const url = `${W_API_BASE_URL}/message/send-text?instanceId=${encodeURIComponent(instanceId)}`;
+
+  logInfo('wapi.send_text_request', {
+    instance_id: instanceId,
+    phone: cleanPhone,
+    url,
+    message_length: message ? message.length : 0,
+  });
+
   try {
-    const response = await fetch(
-      `${W_API_BASE_URL}/message/send-text?instanceId=${instanceId}`,
-      {
-        method: 'POST',
-        headers: getHeaders(token),
-        body: JSON.stringify({
-          phone: cleanPhone,
-          message: message,
-        }),
-      }
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: getHeaders(token),
+      body: JSON.stringify({
+        phone: cleanPhone,
+        message: message,
+      }),
+    }
     );
 
     const { data, text } = await readJsonResponse(response);
@@ -1178,6 +1185,21 @@ export async function getChats(instanceId, token) {
  * Generic message sender that routes to the correct method based on type
  */
 export async function sendMessage(instanceId, token, phone, content, messageType, mediaUrl) {
+  // Validate credentials before attempting
+  if (!instanceId || !token) {
+    logError('wapi.send_message_missing_credentials', new Error('Missing W-API credentials'), {
+      has_instance_id: Boolean(instanceId),
+      has_token: Boolean(token),
+      phone_preview: phone ? String(phone).substring(0, 15) : null,
+      message_type: messageType,
+    });
+    return { success: false, error: 'Credenciais W-API ausentes (instance_id ou token). Verifique a conexão.' };
+  }
+
+  if (!phone) {
+    return { success: false, error: 'Número de telefone é obrigatório' };
+  }
+
   switch (messageType) {
     case 'text':
       return sendText(instanceId, token, phone, content);
