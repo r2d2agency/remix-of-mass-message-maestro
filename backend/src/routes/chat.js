@@ -1401,7 +1401,8 @@ router.post('/conversations/:id/messages', authenticate, async (req, res) => {
     // For W-API, consider connected if has instance_id and token (status may not be updated yet)
     const provider = whatsappProvider.detectProvider(conversation);
     const isConnected = conversation.connection_status === 'connected' || 
-      (provider === 'wapi' && conversation.instance_id && conversation.wapi_token);
+      (provider === 'wapi' && !!conversation.instance_id && !!conversation.wapi_token) ||
+      (provider === 'wapi' && conversation.connection_status === 'unknown');
 
     if (!isConnected) {
       return res.status(400).json({ error: 'Conexão não está ativa' });
@@ -1453,7 +1454,7 @@ router.post('/conversations/:id/messages', authenticate, async (req, res) => {
         const isGroup = String(conversation.remote_jid || '').includes('@g.us') || conversation.is_group === true;
         const to = isGroup
           ? conversation.remote_jid
-          : String(conversation.remote_jid || '').replace('@s.whatsapp.net', '');
+          : String(conversation.remote_jid || '').replace('@s.whatsapp.net', '').replace('@c.us', '').replace(/\D/g, '');
 
         // Use unified provider to send message
         const result = await whatsappProvider.sendMessage(
