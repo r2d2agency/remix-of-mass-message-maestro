@@ -462,6 +462,7 @@ export async function sendText(instanceId, token, phone, message) {
   });
 
   try {
+    logInfo('wapi.send_text_payload', { phone: cleanPhone, body: { phone: cleanPhone, message: message ? message.slice(0, 50) + '...' : '' } });
     const response = await fetch(url, {
       method: 'POST',
       headers: getHeaders(token),
@@ -469,8 +470,7 @@ export async function sendText(instanceId, token, phone, message) {
         phone: cleanPhone,
         message: message,
       }),
-    }
-    );
+    });
 
     const { data, text } = await readJsonResponse(response);
 
