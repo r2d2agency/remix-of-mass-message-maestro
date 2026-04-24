@@ -1448,6 +1448,7 @@ router.post('/conversations/:id/messages', authenticate, async (req, res) => {
     // ASYNC: Send to WhatsApp via unified provider (Evolution or W-API)
     // ============================================================
     (async () => {
+      console.log(`[Chat] Starting background send for conversation ${id}, message ${savedMessage.id}`);
       try {
         // IMPORTANT: groups must keep the full JID (@g.us). If we strip it,
         // providers will send to an invalid destination.
@@ -1466,6 +1467,7 @@ router.post('/conversations/:id/messages', authenticate, async (req, res) => {
         );
 
         if (result.success) {
+          console.log(`[Chat] Message ${savedMessage.id} sent successfully, provider ID: ${result.messageId}`);
           // Update message with provider message_id and status='sent'
           await query(
             `UPDATE chat_messages SET message_id = $1, status = 'sent' WHERE id = $2`,
