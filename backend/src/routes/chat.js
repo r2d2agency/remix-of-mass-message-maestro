@@ -1467,6 +1467,7 @@ router.post('/conversations/:id/messages', authenticate, async (req, res) => {
         );
 
         if (result.success) {
+          console.log(`[Chat] Message ${savedMessage.id} sent successfully, provider ID: ${result.messageId}`);
           // Update message with provider message_id and status='sent'
           await query(
             `UPDATE chat_messages SET message_id = $1, status = 'sent' WHERE id = $2`,
