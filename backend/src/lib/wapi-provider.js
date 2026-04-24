@@ -463,7 +463,10 @@ export async function sendText(instanceId, token, phone, message) {
 
   try {
     logInfo('wapi.send_text_payload', { phone: cleanPhone, body: { phone: cleanPhone, message: message ? message.slice(0, 50) + '...' : '' } });
-    const response = await fetch(url, {
+    
+    // Some W-API versions use individual message endpoints, some use a general one.
+    // Try sending and if 404, try the other common endpoint.
+    let response = await fetch(url, {
       method: 'POST',
       headers: getHeaders(token),
       body: JSON.stringify({
@@ -471,6 +474,20 @@ export async function sendText(instanceId, token, phone, message) {
         message: message,
       }),
     });
+
+    if (response.status === 404) {
+      logWarn('wapi.send_text_404_retrying', { instance_id: instanceId, original_url: url });
+      const fallbackUrl = `${W_API_BASE_URL}/message/send?instanceId=${encodeURIComponent(instanceId)}`;
+      response = await fetch(fallbackUrl, {
+        method: 'POST',
+        headers: getHeaders(token),
+        body: JSON.stringify({
+          phone: cleanPhone,
+          message: message,
+          type: 'text'
+        }),
+      });
+    }
 
     const { data, text } = await readJsonResponse(response);
 
