@@ -850,6 +850,21 @@ const handleGetQRCode = async (connection: Connection) => {
                       <Activity className="h-4 w-4" />
                     </Button>
 
+                    {/* Export connection data as JSON */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleExportConnection(connection)}
+                      disabled={exportingId === connection.id}
+                      title="Exportar conversas, mensagens e contatos desta conexão (JSON)"
+                    >
+                      {exportingId === connection.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <FileJson className="h-4 w-4" />
+                      )}
+                    </Button>
+
                     {/* W-API: Configure webhooks */}
                     {(connection.provider === 'wapi' || !!connection.instance_id) && (
                       <Button
