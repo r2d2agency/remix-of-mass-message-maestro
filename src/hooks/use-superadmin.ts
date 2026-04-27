@@ -537,7 +537,48 @@ export function useSuperadmin() {
     }
   }, []);
 
+  const exportOrganizationData = useCallback(async (orgId: string): Promise<any> => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(`${API_URL}/api/admin/export-data?organization_id=${orgId}`, { headers: getHeaders() });
+      if (!response.ok) {
+        const res = await response.json();
+        throw new Error(res.error || 'Erro ao exportar dados');
+      }
+      return response.json();
+    } catch (err: any) {
+      setError(err.message);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const importOrganizationData = useCallback(async (targetOrgId: string, data: any): Promise<boolean> => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(`${API_URL}/api/admin/import-data`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ target_organization_id: targetOrgId, data })
+      });
+      if (!response.ok) {
+        const res = await response.json();
+        throw new Error(res.error || 'Erro ao importar dados');
+      }
+      return true;
+    } catch (err: any) {
+      setError(err.message);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   return {
+
     loading,
     error,
     checkSuperadmin,
@@ -562,6 +603,8 @@ export function useSuperadmin() {
     getOrganizationMembers,
     createOrganizationUser,
     updateMemberRole,
-    removeMember
+    removeMember,
+    exportOrganizationData,
+    importOrganizationData
   };
 }
