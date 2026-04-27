@@ -2139,7 +2139,7 @@ export default function Admin() {
                 onClick={() => transferOrg && handleExportOrg(transferOrg)}
                 disabled={transferLoading}
               >
-                {transferLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
+                {transferLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
                 Exportar Organização
               </Button>
             </div>
