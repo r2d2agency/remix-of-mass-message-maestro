@@ -7,7 +7,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Plus, QrCode, RefreshCw, Plug, Unplug, Trash2, Phone, Loader2, Wifi, WifiOff, Send, Settings2, AlertTriangle, CheckCircle, Eye, Activity, Radio, Users, Download, Pencil, UserCheck } from "lucide-react";
+import { Plus, QrCode, RefreshCw, Plug, Unplug, Trash2, Phone, Loader2, Wifi, WifiOff, Send, Settings2, AlertTriangle, CheckCircle, Eye, Activity, Radio, Users, Download, Pencil, UserCheck, FileJson } from "lucide-react";
+import { API_URL } from "@/lib/api";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
@@ -69,6 +70,7 @@ const Conexao = () => {
   
   // W-API contact sync state
   const [syncingContacts, setSyncingContacts] = useState<string | null>(null);
+  const [exportingId, setExportingId] = useState<string | null>(null);
 
   // Webhook viewer state (shows what the backend is actually receiving)
   const [webhookViewerOpen, setWebhookViewerOpen] = useState(false);
@@ -361,6 +363,44 @@ const handleGetQRCode = async (connection: Connection) => {
       toast.error(error?.message || 'Erro ao sincronizar contatos');
     } finally {
       setSyncingContacts(null);
+    }
+  };
+
+  const handleExportConnection = async (connection: Connection) => {
+    setExportingId(connection.id);
+    try {
+      const token = localStorage.getItem('auth_token');
+      const response = await fetch(`${API_URL}/api/connections/${connection.id}/export`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+
+      if (!response.ok) {
+        let errMsg = 'Erro ao exportar dados';
+        try {
+          const errJson = await response.json();
+          errMsg = errJson.error || errMsg;
+        } catch (_) {}
+        throw new Error(errMsg);
+      }
+
+      const blob = await response.blob();
+      const safeName = (connection.name || connection.id).replace(/[^a-z0-9]/gi, '_');
+      const filename = `connection-${safeName}-${Date.now()}.json`;
+
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+
+      toast.success(`Dados de "${connection.name}" exportados com sucesso!`);
+    } catch (error: any) {
+      toast.error(error?.message || 'Erro ao exportar dados da conexão');
+    } finally {
+      setExportingId(null);
     }
   };
 
@@ -808,6 +848,21 @@ const handleGetQRCode = async (connection: Connection) => {
                       title="Painel de diagnóstico completo"
                     >
                       <Activity className="h-4 w-4" />
+                    </Button>
+
+                    {/* Export connection data as JSON */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleExportConnection(connection)}
+                      disabled={exportingId === connection.id}
+                      title="Exportar conversas, mensagens e contatos desta conexão (JSON)"
+                    >
+                      {exportingId === connection.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <FileJson className="h-4 w-4" />
+                      )}
                     </Button>
 
                     {/* W-API: Configure webhooks */}
