@@ -366,7 +366,44 @@ const handleGetQRCode = async (connection: Connection) => {
     }
   };
 
-  const handleOpenEditDialog = (connection: Connection) => {
+  const handleExportConnection = async (connection: Connection) => {
+    setExportingId(connection.id);
+    try {
+      const token = localStorage.getItem('auth_token');
+      const response = await fetch(`${API_URL}/api/connections/${connection.id}/export`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+
+      if (!response.ok) {
+        let errMsg = 'Erro ao exportar dados';
+        try {
+          const errJson = await response.json();
+          errMsg = errJson.error || errMsg;
+        } catch (_) {}
+        throw new Error(errMsg);
+      }
+
+      const blob = await response.blob();
+      const safeName = (connection.name || connection.id).replace(/[^a-z0-9]/gi, '_');
+      const filename = `connection-${safeName}-${Date.now()}.json`;
+
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+
+      toast.success(`Dados de "${connection.name}" exportados com sucesso!`);
+    } catch (error: any) {
+      toast.error(error?.message || 'Erro ao exportar dados da conexão');
+    } finally {
+      setExportingId(null);
+    }
+  };
+
     setEditingConnection(connection);
     setEditName(connection.name);
     setEditInstanceId(connection.instance_id || '');
