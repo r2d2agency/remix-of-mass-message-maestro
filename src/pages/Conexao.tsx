@@ -70,6 +70,7 @@ const Conexao = () => {
   
   // W-API contact sync state
   const [syncingContacts, setSyncingContacts] = useState<string | null>(null);
+  const [exportingId, setExportingId] = useState<string | null>(null);
 
   // Webhook viewer state (shows what the backend is actually receiving)
   const [webhookViewerOpen, setWebhookViewerOpen] = useState(false);
