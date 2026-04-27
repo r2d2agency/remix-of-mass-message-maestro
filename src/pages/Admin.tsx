@@ -2118,6 +2118,57 @@ export default function Admin() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Transfer Data Dialog */}
+      <Dialog open={transferDialogOpen} onOpenChange={setTransferDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Transferência de Dados</DialogTitle>
+            <DialogDescription>
+              Exporte conversas e configurações de {transferOrg?.name} ou importe de um arquivo anterior.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="grid gap-6 py-4">
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium">Exportar Dados</h3>
+              <p className="text-xs text-muted-foreground">Baixa um arquivo JSON com todas as conexões, conversas, mensagens e fluxos desta organização.</p>
+              <Button 
+                className="w-full" 
+                variant="outline" 
+                onClick={() => transferOrg && handleExportOrg(transferOrg)}
+                disabled={transferLoading}
+              >
+                {transferLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
+                Exportar Organização
+              </Button>
+            </div>
+
+            <div className="border-t pt-4 space-y-2">
+              <h3 className="text-sm font-medium">Importar Dados</h3>
+              <p className="text-xs text-muted-foreground">Carrega dados de um arquivo de exportação anterior para esta organização.</p>
+              <div className="flex items-center gap-2">
+                <Input 
+                  type="file" 
+                  accept=".json" 
+                  onChange={(e) => transferOrg && handleImportOrg(e, transferOrg)}
+                  disabled={transferLoading}
+                />
+              </div>
+              {transferLoading && (
+                <div className="flex items-center gap-2 text-xs text-primary animate-pulse">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Importando dados, por favor aguarde...
+                </div>
+              )}
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setTransferDialogOpen(false)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 }
