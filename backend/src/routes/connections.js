@@ -296,5 +296,92 @@ router.post('/:id/configure-webhooks', async (req, res) => {
   }
 });
 
+// Export all data for a single connection (conversations, messages, contacts) as JSON
+router.get('/:id/export', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const org = await getUserOrganization(req.userId);
+
+    // Verify access to the connection
+    let whereClause = 'id = $1 AND user_id = $2';
+    let params = [id, req.userId];
+    if (org) {
+      whereClause = 'id = $1 AND organization_id = $2';
+      params = [id, org.organization_id];
+    }
+
+    const connResult = await query(
+      `SELECT * FROM connections WHERE ${whereClause}`,
+      params
+    );
+
+    if (connResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Conexão não encontrada' });
+    }
+
+    const connection = connResult.rows[0];
+
+    // Conversations
+    const conversationsResult = await query(
+      'SELECT * FROM conversations WHERE connection_id = $1 ORDER BY created_at ASC',
+      [id]
+    );
+    const conversations = conversationsResult.rows;
+    const conversationIds = conversations.map(c => c.id);
+
+    // Messages
+    let messages = [];
+    if (conversationIds.length > 0) {
+      const msgResult = await query(
+        'SELECT * FROM chat_messages WHERE conversation_id = ANY($1) ORDER BY timestamp ASC',
+        [conversationIds]
+      );
+      messages = msgResult.rows;
+    }
+
+    // Chat contacts
+    const contactsResult = await query(
+      'SELECT * FROM chat_contacts WHERE connection_id = $1',
+      [id]
+    );
+
+    // Conversation notes (if table exists)
+    let notes = [];
+    try {
+      if (conversationIds.length > 0) {
+        const notesResult = await query(
+          'SELECT * FROM conversation_notes WHERE conversation_id = ANY($1)',
+          [conversationIds]
+        );
+        notes = notesResult.rows;
+      }
+    } catch (_) { /* table may not exist */ }
+
+    const exportData = {
+      version: '1.0',
+      type: 'connection_export',
+      exported_at: new Date().toISOString(),
+      connection,
+      conversations,
+      messages,
+      chat_contacts: contactsResult.rows,
+      conversation_notes: notes,
+      stats: {
+        conversations: conversations.length,
+        messages: messages.length,
+        contacts: contactsResult.rows.length,
+      }
+    };
+
+    const filename = `connection-${(connection.name || connection.id).replace(/[^a-z0-9]/gi, '_')}-${Date.now()}.json`;
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(JSON.stringify(exportData, null, 2));
+  } catch (error) {
+    console.error('Export connection error:', error);
+    res.status(500).json({ error: 'Erro ao exportar dados da conexão: ' + error.message });
+  }
+});
+
 export default router;
 
