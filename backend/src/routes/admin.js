@@ -493,6 +493,232 @@ router.post('/plans/sync-all', requireSuperadmin, async (req, res) => {
   }
 });
 
+// Export organization data (conversations, messages, etc)
+router.get('/export-data', requireSuperadmin, async (req, res) => {
+  try {
+    const { organization_id } = req.query;
+    
+    if (!organization_id) {
+      return res.status(400).json({ error: 'ID da organização é obrigatório' });
+    }
+
+    // 1. Get organization info
+    const org = await query('SELECT * FROM organizations WHERE id = $1', [organization_id]);
+    if (org.rows.length === 0) return res.status(404).json({ error: 'Organização não encontrada' });
+
+    // 2. Get connections
+    const connections = await query('SELECT * FROM connections WHERE organization_id = $1', [organization_id]);
+    const connectionIds = connections.rows.map(c => c.id);
+
+    // 3. Get conversations and messages
+    let conversations = [];
+    let messages = [];
+    
+    if (connectionIds.length > 0) {
+      const convResult = await query(
+        'SELECT * FROM conversations WHERE connection_id = ANY($1)',
+        [connectionIds]
+      );
+      conversations = convResult.rows;
+      const conversationIds = conversations.map(c => c.id);
+
+      if (conversationIds.length > 0) {
+        const msgResult = await query(
+          'SELECT * FROM chat_messages WHERE conversation_id = ANY($1) ORDER BY timestamp ASC',
+          [conversationIds]
+        );
+        messages = msgResult.rows;
+      }
+    }
+
+    // 4. Get contacts (chat_contacts)
+    let chatContacts = [];
+    if (connectionIds.length > 0) {
+      const contactResult = await query(
+        'SELECT * FROM chat_contacts WHERE connection_id = ANY($1)',
+        [connectionIds]
+      );
+      chatContacts = contactResult.rows;
+    }
+
+    // 5. Get Quick Replies
+    const quickReplies = await query('SELECT * FROM quick_replies WHERE organization_id = $1', [organization_id]);
+
+    // 6. Get Message Templates (campaign messages)
+    // Templates belong to users, but we fetch from users in this org
+    const msgTemplates = await query(
+      `SELECT mt.* FROM message_templates mt 
+       JOIN users u ON u.id = mt.user_id 
+       JOIN organization_members om ON om.user_id = u.id 
+       WHERE om.organization_id = $1`,
+      [organization_id]
+    );
+
+    // 7. Get Flows and Chatbots
+    const flows = await query('SELECT * FROM flows WHERE organization_id = $1', [organization_id]);
+    const flowIds = flows.rows.map(f => f.id);
+    
+    let flowNodes = [];
+    let flowEdges = [];
+    if (flowIds.length > 0) {
+      const nodesResult = await query('SELECT * FROM flow_nodes WHERE flow_id = ANY($1)', [flowIds]);
+      flowNodes = nodesResult.rows;
+      const edgesResult = await query('SELECT * FROM flow_edges WHERE flow_id = ANY($1)', [flowIds]);
+      flowEdges = edgesResult.rows;
+    }
+
+    const chatbots = await query('SELECT * FROM chatbots WHERE organization_id = $1', [organization_id]);
+
+    // Construct final bundle
+    const exportData = {
+      version: '1.0',
+      exported_at: new Date().toISOString(),
+      organization: org.rows[0],
+      connections: connections.rows,
+      conversations,
+      messages,
+      chat_contacts: chatContacts,
+      quick_replies: quickReplies.rows,
+      message_templates: msgTemplates.rows,
+      flows: flows.rows,
+      flow_nodes: flowNodes,
+      flow_edges: flowEdges,
+      chatbots: chatbots.rows
+    };
+
+    res.json(exportData);
+  } catch (error) {
+    console.error('Export data error:', error);
+    res.status(500).json({ error: 'Erro ao exportar dados: ' + error.message });
+  }
+});
+
+// Import organization data
+router.post('/import-data', requireSuperadmin, async (req, res) => {
+  try {
+    const { target_organization_id, data } = req.body;
+    
+    if (!target_organization_id || !data) {
+      return res.status(400).json({ error: 'ID da organização e dados são obrigatórios' });
+    }
+
+    // Map old IDs to new IDs to maintain relationships
+    const idMap = {
+      connections: {},
+      conversations: {},
+      messages: {},
+      flows: {}
+    };
+
+    // 1. Import Connections (skip if already exists by name/instance)
+    for (const conn of (data.connections || [])) {
+      const existing = await query(
+        'SELECT id FROM connections WHERE organization_id = $1 AND (name = $2 OR instance_name = $3 OR instance_id = $4)',
+        [target_organization_id, conn.name, conn.instance_name, conn.instance_id]
+      );
+      
+      if (existing.rows.length > 0) {
+        idMap.connections[conn.id] = existing.rows[0].id;
+      } else {
+        const result = await query(
+          `INSERT INTO connections (user_id, organization_id, name, api_url, api_key, instance_name, provider, instance_id, wapi_token, status, phone_number)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
+          [req.userId, target_organization_id, conn.name, conn.api_url, conn.api_key, conn.instance_name, conn.provider, conn.instance_id, conn.wapi_token, conn.status, conn.phone_number]
+        );
+        idMap.connections[conn.id] = result.rows[0].id;
+      }
+    }
+
+    // 2. Import Conversations
+    for (const conv of (data.conversations || [])) {
+      const newConnId = idMap.connections[conv.connection_id];
+      if (!newConnId) continue;
+
+      const existing = await query(
+        'SELECT id FROM conversations WHERE connection_id = $1 AND remote_jid = $2',
+        [newConnId, conv.remote_jid]
+      );
+
+      if (existing.rows.length > 0) {
+        idMap.conversations[conv.id] = existing.rows[0].id;
+      } else {
+        const result = await query(
+          `INSERT INTO conversations (connection_id, remote_jid, contact_name, contact_phone, last_message_at, unread_count, is_archived, is_pinned, assigned_to, is_group, group_name)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
+          [newConnId, conv.remote_jid, conv.contact_name, conv.contact_phone, conv.last_message_at, conv.unread_count, conv.is_archived, conv.is_pinned, req.userId, conv.is_group, conv.group_name]
+        );
+        idMap.conversations[conv.id] = result.rows[0].id;
+      }
+    }
+
+    // 3. Import Messages (avoid duplicates by message_id)
+    let msgCount = 0;
+    for (const msg of (data.messages || [])) {
+      const newConvId = idMap.conversations[msg.conversation_id];
+      if (!newConvId) continue;
+
+      // Check if message already exists
+      const existing = await query('SELECT id FROM chat_messages WHERE message_id = $1', [msg.message_id]);
+      if (existing.rows.length > 0) continue;
+
+      await query(
+        `INSERT INTO chat_messages (conversation_id, message_id, from_me, sender_id, content, message_type, media_url, media_mimetype, wa_media_key, status, timestamp, sender_name, sender_phone)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+        [newConvId, msg.message_id, msg.from_me, req.userId, msg.content, msg.message_type, msg.media_url, msg.media_mimetype, msg.wa_media_key, msg.status, msg.timestamp, msg.sender_name, msg.sender_phone]
+      );
+      msgCount++;
+    }
+
+    // 4. Import Quick Replies
+    for (const qr of (data.quick_replies || [])) {
+      const existing = await query('SELECT id FROM quick_replies WHERE organization_id = $1 AND title = $2', [target_organization_id, qr.title]);
+      if (existing.rows.length > 0) continue;
+
+      await query(
+        `INSERT INTO quick_replies (organization_id, title, content, shortcut, category, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [target_organization_id, qr.title, qr.content, qr.shortcut, qr.category, req.userId]
+      );
+    }
+
+    // 5. Import flows
+    for (const flow of (data.flows || [])) {
+      const result = await query(
+        `INSERT INTO flows (organization_id, name, description, trigger_enabled, trigger_keywords, trigger_match_mode, is_active, is_draft, last_edited_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+        [target_organization_id, flow.name, flow.description, flow.trigger_enabled, flow.trigger_keywords, flow.trigger_match_mode, flow.is_active, flow.is_draft, req.userId]
+      );
+      idMap.flows[flow.id] = result.rows[0].id;
+    }
+
+    // Nodes and edges for flows
+    for (const node of (data.flow_nodes || [])) {
+      const newFlowId = idMap.flows[node.flow_id];
+      if (!newFlowId) continue;
+      await query(
+        `INSERT INTO flow_nodes (flow_id, node_id, node_type, name, position_x, position_y, content)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [newFlowId, node.node_id, node.node_type, node.name, node.position_x, node.position_y, node.content]
+      );
+    }
+    for (const edge of (data.flow_edges || [])) {
+      const newFlowId = idMap.flows[edge.flow_id];
+      if (!newFlowId) continue;
+      await query(
+        `INSERT INTO flow_edges (flow_id, edge_id, source_node_id, target_node_id, source_handle, target_handle, label, edge_type)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [newFlowId, edge.edge_id, edge.source_node_id, edge.target_node_id, edge.source_handle, edge.target_handle, edge.label, edge.edge_type]
+      );
+    }
+
+    res.json({ success: true, messages_imported: msgCount });
+  } catch (error) {
+    console.error('Import data error:', error);
+    res.status(500).json({ error: 'Erro ao importar dados: ' + error.message });
+  }
+});
+
+
 // Delete plan
 router.delete('/plans/:id', requireSuperadmin, async (req, res) => {
   try {
