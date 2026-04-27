@@ -404,6 +404,7 @@ const handleGetQRCode = async (connection: Connection) => {
     }
   };
 
+  const handleOpenEditDialog = (connection: Connection) => {
     setEditingConnection(connection);
     setEditName(connection.name);
     setEditInstanceId(connection.instance_id || '');
