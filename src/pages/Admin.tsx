@@ -198,8 +198,62 @@ export default function Admin() {
     createOrganizationUser,
     updateMemberRole,
     removeMember,
-    syncAllPlansToOrganizations
+    syncAllPlansToOrganizations,
+    exportOrganizationData,
+    importOrganizationData
   } = useSuperadmin();
+
+  const [transferDialogOpen, setTransferDialogOpen] = useState(false);
+  const [transferOrg, setTransferOrg] = useState<Organization | null>(null);
+  const [transferLoading, setTransferLoading] = useState(false);
+
+  const handleExportOrg = async (org: Organization) => {
+    try {
+      setTransferLoading(true);
+      const data = await exportOrganizationData(org.id);
+      if (data) {
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `export-${org.slug}-${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast.success('Dados exportados com sucesso!');
+      }
+    } catch (err) {
+      toast.error('Erro ao exportar dados');
+    } finally {
+      setTransferLoading(false);
+    }
+  };
+
+  const handleImportOrg = async (event: React.ChangeEvent<HTMLInputElement>, targetOrg: Organization) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        setTransferLoading(true);
+        const data = JSON.parse(e.target?.result as string);
+        const success = await importOrganizationData(targetOrg.id, data);
+        if (success) {
+          toast.success('Dados importados com sucesso!');
+          loadData();
+        }
+      } catch (err) {
+        toast.error('Erro ao importar dados: arquivo inválido');
+      } finally {
+        setTransferLoading(false);
+        event.target.value = ''; // Reset input
+      }
+    };
+    reader.readAsText(file);
+  };
+
 
   useEffect(() => {
     checkAccess();
